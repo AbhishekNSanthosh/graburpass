@@ -1,0 +1,43 @@
+@layer theme, base, components, utilities;
+
+
+@import "tailwindcss";
+
+/* ---------- Colors ---------- */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* ---------- Tailwind Theme Variables ---------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-dm-sans);
+  /* updated to DM Sans */
+  --font-mono: monospace;
+  --color-red-50: #fff0f3;
+  --color-red-100: #ffdde3;
+  --color-red-200: #ffc1cc;
+  --color-red-300: #ff95a7;
+  --color-red-400: #ff5975;
+  --color-red-500: #ff264b;
+  --color-red-600: #fc0630;
+  --color-red-700: #eb0028;
+  /* red */
+  --color-red-800: #af0522;
+  --color-red-900: #900c22;
+  --color-red-950: #50000e;
+
+  /* Optional: set a main primary color */
+  --color-primary: var(--color-red-700);
+}
+
+/* ---------- Body Styles ---------- */
+body {
+  background: #ffffff;
+  /* background: #FAF9F6; */
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  /* DM Sans applied */
+}
