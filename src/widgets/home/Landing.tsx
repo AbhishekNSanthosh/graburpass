@@ -3,11 +3,6 @@ import React from 'react';
 export default function EffortlessManagement() {
   return (
     <section className="relative  py-16 lg:py-24 overflow-hidden">
-      {/* Subtle Background Pattern */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-red-200 rounded-full mix-blend-multiply filter blur-xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-red-200 rounded-full mix-blend-multiply filter blur-xl"></div>
-      </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
