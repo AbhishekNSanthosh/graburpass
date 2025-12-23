@@ -65,7 +65,7 @@ export default function EffortlessManagement() {
                 </div>
               </div>
               <div className="mt-6 text-center lg:text-left">
-                <p className="text-sm text-gray-500">Powered by Ticko—Seamless, Secure, Event-Ready.</p>
+                <p className="text-sm text-gray-500">Powered by graburpass—Seamless, Secure, Event-Ready.</p>
               </div>
             </div>
           </div>

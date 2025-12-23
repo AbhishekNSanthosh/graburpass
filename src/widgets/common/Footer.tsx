@@ -8,7 +8,7 @@ export default function Footer() {
           {/* Logo & Description */}
           <div className="col-span-1 md:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="text-2xl font-bold text-red-500">Ticko</h3>
+              <h3 className="text-2xl font-bold text-red-500">graburpass</h3>
               <span className="text-sm font-light">Your all-in-one digital ticketing platform</span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-6">
@@ -68,7 +68,7 @@ export default function Footer() {
 
         {/* Bottom Bar */}
         <div className="border-t border-gray-800 mt-12 pt-8 text-center text-sm text-gray-400">
-          <p>&copy; 2025 Ticko Inc. All rights reserved.</p>
+          <p>&copy; 2025 graburpass Inc. All rights reserved.</p>
         </div>
       </div>
     </footer>

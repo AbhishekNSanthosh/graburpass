@@ -7,12 +7,12 @@ export default function Hero() {
         <div className="text-center lg:text-left lg:flex lg:items-center lg:justify-between">
           <div className="lg:w-1/2 lg:pr-8">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-gray-900 mb-6">
-              <span className="block text-red-600">Ticko</span>
+              <span className="block text-red-600">graburpass</span>
               Your Events,
               <span className="block">Effortlessly Ticketed</span>
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-lg mx-auto lg:mx-0 leading-relaxed">
-              Create, manage, and scan digital tickets with QR codes in seconds. From small gatherings to epic events—Ticko handles it all with seamless check-ins and real-time analytics.
+              Create, manage, and scan digital tickets with QR codes in seconds. From small gatherings to epic events—graburpass handles it all with seamless check-ins and real-time analytics.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <a
@@ -43,7 +43,7 @@ export default function Hero() {
                 </div>
               </div>
               <div className="mt-6 text-sm text-gray-500">
-                <p>Powered by Ticko—Simple, Secure, Scalable.</p>
+                <p>Powered by graburpass—Simple, Secure, Scalable.</p>
               </div>
             </div>
           </div>

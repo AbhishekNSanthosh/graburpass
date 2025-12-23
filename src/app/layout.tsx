@@ -8,15 +8,15 @@ const DMSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ticko.in"),
+  metadataBase: new URL("https://graburpass.in"),
   title: {
-    default: "Ticko – Smart Event Ticketing Platform",
-    template: "%s | Ticko",
+    default: "graburpass – Smart Event Ticketing Platform",
+    template: "%s | graburpass",
   },
   description:
-    "Ticko is a modern event ticketing and pass management platform for colleges, communities, and events. Create, manage, and scan tickets effortlessly.",
+    "graburpass is a modern event ticketing and pass management platform for colleges, communities, and events. Create, manage, and scan tickets effortlessly.",
   keywords: [
-    "Ticko",
+    "graburpass",
     "event ticketing",
     "ticket platform",
     "college fests",
@@ -26,20 +26,20 @@ export const metadata: Metadata = {
     "event management",
     "India",
   ],
-  authors: [{ name: "Ticko" }],
-  creator: "Ticko",
-  publisher: "Ticko",
+  authors: [{ name: "graburpass" }],
+  creator: "graburpass",
+  publisher: "graburpass",
 
   alternates: {
-    canonical: "https://ticko.in",
+    canonical: "https://graburpass.in",
   },
 
   openGraph: {
-    title: "Ticko – Smart Event Ticketing Platform",
+    title: "graburpass – Smart Event Ticketing Platform",
     description:
       "Sell tickets, manage events, generate passes, and scan QR codes — all in one seamless system.",
-    url: "https://ticko.in",
-    siteName: "Ticko",
+    url: "https://graburpass.in",
+    siteName: "graburpass",
     locale: "en_IN",
     type: "website",
     images: [
@@ -47,14 +47,14 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Ticko – Smart Ticketing Platform",
+        alt: "graburpass – Smart Ticketing Platform",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Ticko – Smart Event Ticketing Platform",
+    title: "graburpass – Smart Event Ticketing Platform",
     description:
       "Sell tickets, manage events, generate passes, and scan QR codes — all in one seamless system.",
     images: ["/og-image.png"],
