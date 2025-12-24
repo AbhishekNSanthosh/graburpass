@@ -144,7 +144,7 @@ export default function Home() {
         : "No upcoming events",
       icon: CalendarDays,
       href: dashboard.nextEvent
-        ? `/e/${dashboard.nextEvent.slug}--${dashboard.nextEvent.id}`
+        ? `/events/${dashboard.nextEvent.slug}--${dashboard.nextEvent.id}`
         : undefined,
       bgColor: "bg-gradient-to-br from-red-400 to-red-600",
       textColor: "text-white",

@@ -142,7 +142,7 @@ export default function ManageEvents() {
 
   const handleShare = async (event: Event) => {
   const slug = event.slug || slugify(event.name);
-  const shareUrl = `${SITE_URL}/e/${slug}--${event.id}`;
+  const shareUrl = `${SITE_URL}/events/${slug}--${event.id}`;
 
   const sharePromise = async () => {
     // Save only once
