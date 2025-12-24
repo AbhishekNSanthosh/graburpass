@@ -2,18 +2,28 @@
 
 import { MoveRight } from "lucide-react";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import LoginModal from "./LoginModal";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/utils/configs/firebaseConfig";
 
 const navItems = [
-  { title: "about", to: "" },
-  { title: "events", to: "" },
-  { title: "pricing", to: "" },
-  { title: "contact", to: "" },
+  { title: "events", to: "/events" },
+  { title: "pricing", to: "#pricing" },
+  { title: "contact", to: "/contact" },
 ];
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsLoggedIn(!!user);
+    });
+
+    return () => unsubscribe(); // cleanup listener
+  }, []);
 
   return (
     <>
@@ -22,9 +32,12 @@ export default function Header() {
 
           {/* Logo */}
           <div className="flex flex-1 flex-col items-start">
-            <h1 className="text-3xl md:text-4xl font-bold text-primary -mb-1">
-              graburpass
-            </h1>
+            <Link
+              href="/"
+              className="text-3xl md:text-4xl font-bold text-primary -mb-1"
+            >
+              Graburpass
+            </Link>
             <span className="text-sm text-gray-500 font-light">
               Your all-in-one digital ticketing platform
             </span>
@@ -39,20 +52,31 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* Login */}
+          {/* Auth Action */}
           <div className="flex flex-1 items-center justify-end">
-            <button
-              onClick={() => setOpen(true)}
-              className="flex items-center gap-2 font-medium"
-            >
-              Login <MoveRight className="mt-1" />
-            </button>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard/home"
+                className="flex items-center gap-2 font-medium text-red-600 hover:text-red-700"
+              >
+                Dashboard <MoveRight className="mt-1" />
+              </Link>
+            ) : (
+              <button
+                onClick={() => setOpen(true)}
+                className="flex items-center gap-2 font-medium"
+              >
+                Login <MoveRight className="mt-1" />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       {/* Modal */}
-      <LoginModal open={open} onClose={() => setOpen(false)} />
+      {!isLoggedIn && (
+        <LoginModal open={open} onClose={() => setOpen(false)} />
+      )}
     </>
   );
 }

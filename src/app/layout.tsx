@@ -9,38 +9,42 @@ const DMSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://graburpass.in"),
+  metadataBase: new URL("https://graburpass.com"),
+
   title: {
-    default: "graburpass – Smart Event Ticketing Platform",
-    template: "%s | graburpass",
+    default: "GraburPass – Digital Event Ticketing & Pass Management Platform",
+    template: "%s | GraburPass",
   },
+
   description:
-    "graburpass is a modern event ticketing and pass management platform for colleges, communities, and events. Create, manage, and scan tickets effortlessly.",
+    "GraburPass is a digital event ticketing and pass management platform operated by Beond Innovations. Create events, manage ticket sales, issue QR-based passes, and track attendance with ease.",
+
   keywords: [
-    "graburpass",
-    "event ticketing",
-    "ticket platform",
-    "college fests",
-    "event passes",
-    "qr ticketing",
-    "scan tickets",
-    "event management",
-    "India",
+    "GraburPass",
+    "event ticketing platform",
+    "digital ticketing India",
+    "QR ticketing system",
+    "event pass management",
+    "college fest ticketing",
+    "event entry QR scan",
+    "event management software",
+    "ticketing SaaS India",
   ],
-  authors: [{ name: "graburpass" }],
-  creator: "graburpass",
-  publisher: "graburpass",
+
+  authors: [{ name: "GraburPass" }],
+  creator: "GraburPass",
+  publisher: "GraburPass",
 
   alternates: {
-    canonical: "https://graburpass.in",
+    canonical: "https://graburpass.com",
   },
 
   openGraph: {
-    title: "graburpass – Smart Event Ticketing Platform",
+    title: "GraburPass – Digital Event Ticketing Platform",
     description:
-      "Sell tickets, manage events, generate passes, and scan QR codes — all in one seamless system.",
-    url: "https://graburpass.in",
-    siteName: "graburpass",
+      "A modern ticketing and event pass management platform for colleges, communities, and organizers. Sell tickets, generate QR passes, and manage entries efficiently.",
+    url: "https://graburpass.com",
+    siteName: "GraburPass",
     locale: "en_IN",
     type: "website",
     images: [
@@ -48,16 +52,16 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "graburpass – Smart Ticketing Platform",
+        alt: "GraburPass – Digital Event Ticketing Platform",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "graburpass – Smart Event Ticketing Platform",
+    title: "GraburPass – Digital Event Ticketing Platform",
     description:
-      "Sell tickets, manage events, generate passes, and scan QR codes — all in one seamless system.",
+      "Create events, sell tickets, generate QR passes, and manage event entries — all in one platform.",
     images: ["/og-image.png"],
   },
 
@@ -67,6 +71,11 @@ export const metadata: Metadata = {
   },
 
   manifest: "/site.webmanifest",
+
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -76,8 +85,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${DMSans.variable} antialiased`}>{children}
-        <Toaster position="bottom-center"/>
+      <body className={`${DMSans.variable} antialiased`}>
+        {children}
+        <Toaster position="bottom-center" />
       </body>
     </html>
   );
