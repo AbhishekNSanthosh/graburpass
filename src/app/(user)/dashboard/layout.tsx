@@ -1,12 +1,41 @@
-import Sidebar from '@/widgets/common/dashboard/Sidebar';
-import Topbar from '@/widgets/common/dashboard/Topbar'; // Assuming you have or will create a Topbar component
-import React from 'react';
+"use client";
+
+import Sidebar from "@/widgets/common/dashboard/Sidebar";
+import Topbar from "@/widgets/common/dashboard/Topbar";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/utils/configs/firebaseConfig";
 
 export default function Layout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace("/");
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // ⏳ Prevent UI flash before auth check
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "react-hot-toast";
 
 const DMSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -75,7 +76,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${DMSans.variable} antialiased`}>{children}</body>
+      <body className={`${DMSans.variable} antialiased`}>{children}
+        <Toaster position="bottom-center"/>
+      </body>
     </html>
   );
 }

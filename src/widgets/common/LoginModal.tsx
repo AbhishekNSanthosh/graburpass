@@ -1,6 +1,15 @@
 "use client";
 
+import { googleLogin } from "@/libs/auth";
 import { X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "@/utils/configs/firebaseConfig";
 
 interface LoginModalProps {
   open: boolean;
@@ -8,11 +17,45 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ open, onClose }: LoginModalProps) {
+  const router = useRouter();
+
   if (!open) return null;
+
+  const handleGoogleLogin = async () => {
+    try {
+      const user = await googleLogin();
+      if (!user) return;
+
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+
+      // 🆕 New user
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          name: user.displayName || "",
+          photoURL: user.photoURL || "",
+          profileCompleted: false,
+          createdAt: serverTimestamp(),
+        });
+
+        onClose();
+        router.push("/dashboard/complete-profile");
+      }
+      // 👤 Existing user
+      else {
+        onClose();
+        router.push("/dashboard/profile");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("Google login failed");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/50"
@@ -20,8 +63,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl w-[90%] max-w-md p-6 shadow-xl animate-fadeIn">
-        
+      <div className="relative bg-white rounded-2xl w-[90%] max-w-md p-6 shadow-xl">
         {/* Close */}
         <button
           onClick={onClose}
@@ -37,15 +79,11 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
           Sign in to continue to GraburPass
         </p>
 
-        {/* Google Login Button */}
         <button
+          onClick={handleGoogleLogin}
           className="w-full flex items-center justify-center gap-3 border rounded-lg py-3 hover:bg-gray-50 transition"
         >
-          <img
-            src="/google.svg"
-            alt="Google"
-            className="w-5 h-5"
-          />
+          <img src="/google.svg" className="w-5 h-5" />
           Continue with Google
         </button>
       </div>
