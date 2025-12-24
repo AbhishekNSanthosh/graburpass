@@ -20,10 +20,12 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db } from "@/utils/configs/firebaseConfig";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 export default function MyProfile() {
   const auth = getAuth();
   const user = auth.currentUser;
+  const router = useRouter()
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState({
@@ -94,7 +96,7 @@ export default function MyProfile() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = "/login";
+    router.replace('/')
   };
 
   /* ================= DELETE ACCOUNT ================= */
@@ -107,7 +109,7 @@ export default function MyProfile() {
 
     await deleteUser(user);
     await updateDoc(doc(db, "users", user.uid), {});
-    window.location.href = "/";
+    router.replace('/')
   };
 
   if (loading) return <div className="p-6">Loading profile...</div>;

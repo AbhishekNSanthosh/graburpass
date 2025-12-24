@@ -43,7 +43,7 @@ interface Event {
 /* ================= HELPERS ================= */
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+  process.env.NEXT_PUBLIC_SITE_URL || window?.location.origin;
 
 function slugify(text: string) {
   return text

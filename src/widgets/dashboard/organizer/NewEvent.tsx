@@ -913,7 +913,6 @@ export default function NewEvent() {
                   Review your event details and choose an action below.
                 </p>
                 <button
-                  onClick={() => window.open("/preview", "_blank")} // Mock preview
                   className="flex items-center justify-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
                 >
                   <Eye className="h-4 w-4" />

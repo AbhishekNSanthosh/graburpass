@@ -28,7 +28,7 @@ export default function EventDetails() {
   console.log(params)
   const slugId = params?.slugId as string;
   console.log(slugId)
-  const eventId = slugId.split("--").pop()!;
+  const eventId = slugId?.split("--").pop()!;
 
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +85,7 @@ export default function EventDetails() {
         </section>
 
         <button
-          onClick={() => navigator.clipboard.writeText(window.location.href)}
+          onClick={() => navigator.clipboard.writeText(window?.location.href)}
           className="flex items-center gap-2 px-4 py-2 border rounded-full hover:bg-gray-100"
         >
           <Share2 className="h-4 w-4" /> Share
