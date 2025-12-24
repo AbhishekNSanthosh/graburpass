@@ -1,5 +1,5 @@
-"use client"
-import React, { useState } from 'react';
+"use client";
+import React, { useState } from "react";
 import {
   Calendar,
   Clock,
@@ -15,7 +15,19 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-} from 'lucide-react';
+} from "lucide-react";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import { db, storage } from "@/utils/configs/firebaseConfig";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 interface TicketType {
   name: string;
@@ -29,7 +41,7 @@ interface EventFormData {
   description: string;
   date: string;
   time: string;
-  locationType: 'online' | 'offline';
+  locationType: "online" | "offline";
   venueAddress: string;
   onlineLink: string;
   isPaid: boolean;
@@ -40,31 +52,46 @@ interface EventFormData {
 
 export default function NewEvent() {
   const [step, setStep] = useState(1);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [publishedId, setPublishedId] = useState<string | null>(null);
+
   const [formData, setFormData] = useState<EventFormData>({
-    name: '',
-    category: '',
-    description: '',
-    date: '',
-    time: '',
-    locationType: 'offline',
-    venueAddress: '',
-    onlineLink: '',
+    name: "",
+    category: "",
+    description: "",
+    date: "",
+    time: "",
+    locationType: "offline",
+    venueAddress: "",
+    onlineLink: "",
     isPaid: false,
-    ticketTypes: [{ name: 'General', price: 0, quantity: 100 }],
+    ticketTypes: [{ name: "General", price: 0, quantity: 100 }],
     poster: null,
     posterPreview: null,
   });
+  console.log(formData);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const categories = ['Conference', 'Workshop', 'Meetup', 'Concert', 'Seminar', 'Other'];
+  const router = useRouter();
+  const categories = [
+    "Conference",
+    "Workshop",
+    "Meetup",
+    "Concert",
+    "Seminar",
+    "Other",
+  ];
 
   const updateFormData = (updates: Partial<EventFormData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
+    setFormData((prev) => ({ ...prev, ...updates }));
   };
 
   const addTicketType = () => {
     updateFormData({
-      ticketTypes: [...formData.ticketTypes, { name: 'New Ticket', price: 0, quantity: 100 }],
+      ticketTypes: [
+        ...formData.ticketTypes,
+        { name: "New Ticket", price: 0, quantity: 100 },
+      ],
     });
   };
 
@@ -90,36 +117,177 @@ export default function NewEvent() {
     }
   };
 
-  const handleSubmit = async (publish: boolean) => {
+  const SaveAsDraft = async () => {
     setIsSubmitting(true);
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    console.log('Event saved:', { ...formData, publish });
-    setIsSubmitting(false);
-    if (publish) {
-      alert('Event published!');
-    } else {
-      alert('Event saved as draft!');
+
+    const savePromise = async () => {
+      let docRef;
+
+      if (draftId) {
+        // 🔁 Update existing draft
+        docRef = doc(db, "event_drafts", draftId);
+        await updateDoc(docRef, {
+          name: formData.name,
+          category: formData.category,
+          description: formData.description,
+          date: formData.date,
+          time: formData.time,
+          locationType: formData.locationType,
+          venueAddress: formData.venueAddress,
+          onlineLink: formData.onlineLink,
+          isPaid: formData.isPaid,
+          ticketTypes: formData.ticketTypes,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // 🆕 Create new draft
+        docRef = await addDoc(collection(db, "event_drafts"), {
+          name: formData.name,
+          category: formData.category,
+          description: formData.description,
+          date: formData.date,
+          time: formData.time,
+          locationType: formData.locationType,
+          venueAddress: formData.venueAddress,
+          onlineLink: formData.onlineLink,
+          isPaid: formData.isPaid,
+          ticketTypes: formData.ticketTypes,
+          posterUrl: null,
+          status: "draft",
+          createdAt: serverTimestamp(),
+        });
+
+        setDraftId(docRef.id); // ⭐ persist ID
+      }
+
+      // 🖼 Upload poster to Storage
+      if (formData.poster) {
+        const id = draftId ?? docRef.id;
+
+        const posterRef = ref(
+          storage,
+          `event-posters/${id}/${formData.poster.name}`
+        );
+
+        await uploadBytes(posterRef, formData.poster);
+        const posterUrl = await getDownloadURL(posterRef);
+
+        await updateDoc(doc(db, "event_drafts", id), {
+          posterUrl,
+        });
+      }
+    };
+
+    try {
+      await toast.promise(savePromise(), {
+        loading: "Saving draft...",
+        success: "Draft saved successfully 💾",
+        error: "Failed to save draft ❌",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+
+    const submitPromise = async () => {
+      let docRef;
+
+      // ✅ Extract only Firestore-safe fields
+      const eventData = {
+        name: formData.name,
+        category: formData.category,
+        description: formData.description,
+        date: formData.date,
+        time: formData.time,
+        locationType: formData.locationType,
+        venueAddress: formData.venueAddress,
+        onlineLink: formData.onlineLink,
+        isPaid: formData.isPaid,
+        ticketTypes: formData.ticketTypes,
+        status: "published",
+      };
+
+      if (publishedId) {
+        // 🔁 Update existing published event
+        docRef = doc(db, "published_events", publishedId);
+        await updateDoc(docRef, {
+          ...eventData,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // 🆕 Create new published event
+        docRef = await addDoc(collection(db, "published_events"), {
+          ...eventData,
+          posterUrl: null,
+          createdAt: serverTimestamp(),
+        });
+
+        setPublishedId(docRef.id);
+      }
+
+      // 🖼 Upload poster (Storage only)
+      if (formData.poster) {
+        const posterRef = ref(
+          storage,
+          `event-posters/${docRef.id}/${formData.poster.name}`
+        );
+
+        await uploadBytes(posterRef, formData.poster);
+        const posterUrl = await getDownloadURL(posterRef);
+
+        await updateDoc(doc(db, "published_events", docRef.id), {
+          posterUrl,
+        });
+      }
+
+      // 🧹 Delete draft after successful publish
+      if (draftId) {
+        await deleteDoc(doc(db, "event_drafts", draftId));
+        setDraftId(null);
+      }
+    };
+
+    router.prefetch("/dashboard/organizer/manage-events");
+    try {
+      await toast.promise(submitPromise(), {
+        loading: "Publishing event...",
+        success: "Event published successfully 🎉",
+        error: "Failed to publish event ❌",
+      });
+      router.push("/dashboard/organizer/manage-events");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const steps = [
-    { id: 1, title: 'Basic Info', icon: Calendar },
-    { id: 2, title: 'Date & Time', icon: Clock },
-    { id: 3, title: 'Location', icon: MapPin },
-    { id: 4, title: 'Ticket Setup', icon: Ticket },
-    { id: 5, title: 'Media', icon: Image },
-    { id: 6, title: 'Publish', icon: Check },
+    { id: 1, title: "Basic Info", icon: Calendar },
+    { id: 2, title: "Date & Time", icon: Clock },
+    { id: 3, title: "Location", icon: MapPin },
+    { id: 4, title: "Ticket Setup", icon: Ticket },
+    { id: 5, title: "Media", icon: Image },
+    { id: 6, title: "Publish", icon: Check },
   ];
 
   const isValidStep = (currentStep: number) => {
     switch (currentStep) {
-      case 1: return formData.name && formData.category && formData.description;
-      case 2: return formData.date && formData.time;
-      case 3: return formData.locationType === 'offline' ? formData.venueAddress : formData.onlineLink;
-      case 4: return formData.ticketTypes.every(t => t.name && t.quantity > 0);
-      case 5: return true; // Optional
-      default: return true;
+      case 1:
+        return formData.name && formData.category && formData.description;
+      case 2:
+        return formData.date && formData.time;
+      case 3:
+        return formData.locationType === "offline"
+          ? formData.venueAddress
+          : formData.onlineLink;
+      case 4:
+        return formData.ticketTypes.every((t) => t.name && t.quantity > 0);
+      case 5:
+        return true; // Optional
+      default:
+        return true;
     }
   };
 
@@ -148,10 +316,10 @@ export default function NewEvent() {
                 onClick={() => setStep(s.id)}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   step === s.id
-                    ? 'bg-red-600 text-white'
+                    ? "bg-red-600 text-white"
                     : step > s.id
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-200 text-gray-500 hover:bg-gray-300"
                 }`}
               >
                 <s.icon className="h-4 w-4" />
@@ -171,34 +339,46 @@ export default function NewEvent() {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Event Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Event Name
+                  </label>
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={e => updateFormData({ name: e.target.value })}
+                    onChange={(e) => updateFormData({ name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="e.g., React Conf 2026"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category
+                  </label>
                   <select
                     value={formData.category}
-                    onChange={e => updateFormData({ category: e.target.value })}
+                    onChange={(e) =>
+                      updateFormData({ category: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
                     <option value="">Select Category</option>
-                    {categories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
                 <textarea
                   value={formData.description}
-                  onChange={e => updateFormData({ description: e.target.value })}
+                  onChange={(e) =>
+                    updateFormData({ description: e.target.value })
+                  }
                   rows={4}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Tell us about your event..."
@@ -215,21 +395,25 @@ export default function NewEvent() {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date
+                  </label>
                   <input
                     type="date"
                     value={formData.date}
                     min="2025-12-13"
-                    onChange={e => updateFormData({ date: e.target.value })}
+                    onChange={(e) => updateFormData({ date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Time
+                  </label>
                   <input
                     type="time"
                     value={formData.time}
-                    onChange={e => updateFormData({ time: e.target.value })}
+                    onChange={(e) => updateFormData({ time: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -245,46 +429,54 @@ export default function NewEvent() {
               </h2>
               <div className="flex items-center space-x-4 mb-4">
                 <button
-                  onClick={() => updateFormData({ locationType: 'offline' })}
+                  onClick={() => updateFormData({ locationType: "offline" })}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
-                    formData.locationType === 'offline'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700'
+                    formData.locationType === "offline"
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-100 text-gray-700"
                   }`}
                 >
                   <MapPin className="h-4 w-4" />
                   <span>Offline</span>
                 </button>
                 <button
-                  onClick={() => updateFormData({ locationType: 'online' })}
+                  onClick={() => updateFormData({ locationType: "online" })}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
-                    formData.locationType === 'online'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700'
+                    formData.locationType === "online"
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-100 text-gray-700"
                   }`}
                 >
                   <Globe className="h-4 w-4" />
                   <span>Online</span>
                 </button>
               </div>
-              {formData.locationType === 'offline' ? (
+              {formData.locationType === "offline" ? (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Venue Address</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Venue Address
+                  </label>
                   <input
                     type="text"
                     value={formData.venueAddress}
-                    onChange={e => updateFormData({ venueAddress: e.target.value })}
+                    onChange={(e) =>
+                      updateFormData({ venueAddress: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Full address including city"
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Online Link</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Online Link
+                  </label>
                   <input
                     type="url"
                     value={formData.onlineLink}
-                    onChange={e => updateFormData({ onlineLink: e.target.value })}
+                    onChange={(e) =>
+                      updateFormData({ onlineLink: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="e.g., https://zoom.us/j/123456789"
                   />
@@ -304,8 +496,8 @@ export default function NewEvent() {
                   onClick={() => updateFormData({ isPaid: false })}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
                     !formData.isPaid
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700'
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-100 text-gray-700"
                   }`}
                 >
                   <span>Free</span>
@@ -314,24 +506,31 @@ export default function NewEvent() {
                   onClick={() => updateFormData({ isPaid: true })}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
                     formData.isPaid
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700'
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-100 text-gray-700"
                   }`}
                 >
                   <span>Paid</span>
                 </button>
               </div>
               {formData.isPaid && (
-                <div className="text-sm text-gray-600 mb-4">Add ticket types below.</div>
+                <div className="text-sm text-gray-600 mb-4">
+                  Add ticket types below.
+                </div>
               )}
               <div className="space-y-4">
                 {formData.ticketTypes.map((ticket, index) => (
-                  <div key={index} className="flex items-end space-x-4 p-4 bg-gray-50 rounded-md">
+                  <div
+                    key={index}
+                    className="flex items-end space-x-4 p-4 bg-gray-50 rounded-md"
+                  >
                     <div className="flex-1 space-y-2">
                       <input
                         type="text"
                         value={ticket.name}
-                        onChange={e => updateTicketType(index, { name: e.target.value })}
+                        onChange={(e) =>
+                          updateTicketType(index, { name: e.target.value })
+                        }
                         placeholder="Ticket Name"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
@@ -339,14 +538,22 @@ export default function NewEvent() {
                         <input
                           type="number"
                           value={ticket.price}
-                          onChange={e => updateTicketType(index, { price: Number(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            updateTicketType(index, {
+                              price: Number(e.target.value) || 0,
+                            })
+                          }
                           placeholder="Price ($)"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                         />
                         <input
                           type="number"
                           value={ticket.quantity}
-                          onChange={e => updateTicketType(index, { quantity: Number(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            updateTicketType(index, {
+                              quantity: Number(e.target.value) || 0,
+                            })
+                          }
                           placeholder="Quantity"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                         />
@@ -378,7 +585,9 @@ export default function NewEvent() {
                 Media
               </h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Event Poster/Banner</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Event Poster/Banner
+                </label>
                 {formData.posterPreview ? (
                   <div className="relative">
                     <img
@@ -387,7 +596,9 @@ export default function NewEvent() {
                       className="w-full max-w-md h-64 object-cover rounded-md"
                     />
                     <button
-                      onClick={() => updateFormData({ poster: null, posterPreview: null })}
+                      onClick={() =>
+                        updateFormData({ poster: null, posterPreview: null })
+                      }
                       className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full"
                     >
                       <X className="h-4 w-4" />
@@ -397,7 +608,9 @@ export default function NewEvent() {
                   <label className="flex items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:border-red-400 transition-colors">
                     <div className="text-center">
                       <Image className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                      <p className="text-sm text-gray-500">Click to upload poster (JPG, PNG up to 5MB)</p>
+                      <p className="text-sm text-gray-500">
+                        Click to upload poster (JPG, PNG up to 5MB)
+                      </p>
                       <input
                         type="file"
                         accept="image/*"
@@ -418,9 +631,11 @@ export default function NewEvent() {
                 Publish
               </h2>
               <div className="text-center space-y-4">
-                <p className="text-sm text-gray-600">Review your event details and choose an action below.</p>
+                <p className="text-sm text-gray-600">
+                  Review your event details and choose an action below.
+                </p>
                 <button
-                  onClick={() => window.open('/preview', '_blank')} // Mock preview
+                  onClick={() => window.open("/preview", "_blank")} // Mock preview
                   className="flex items-center justify-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
                 >
                   <Eye className="h-4 w-4" />
@@ -447,18 +662,18 @@ export default function NewEvent() {
                   disabled={!isValidStep(step)}
                   className={`px-6 py-3 rounded-md text-sm font-medium ${
                     isValidStep(step)
-                      ? 'bg-red-600 text-white hover:bg-red-700'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  {step === 5 ? 'Next: Publish' : 'Next'}
+                  {step === 5 ? "Next: Publish" : "Next"}
                   <ChevronRight className="h-4 w-4 inline ml-2" />
                 </button>
               </>
             ) : (
               <div className="flex space-x-4">
                 <button
-                  onClick={() => handleSubmit(false)}
+                  onClick={() => SaveAsDraft()}
                   disabled={isSubmitting}
                   className="flex items-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
                 >
@@ -466,16 +681,18 @@ export default function NewEvent() {
                   <span>Save Draft</span>
                 </button>
                 <button
-                  onClick={() => handleSubmit(true)}
+                  onClick={() => handleSubmit()}
                   disabled={isSubmitting || !isValidStep(4)}
                   className={`flex items-center space-x-2 px-6 py-3 rounded-md font-medium ${
                     isSubmitting || !isValidStep(4)
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-red-600 text-white hover:bg-red-700'
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-red-600 text-white hover:bg-red-700"
                   }`}
                 >
                   <Check className="h-4 w-4" />
-                  <span>{isSubmitting ? 'Publishing...' : 'Publish Event'}</span>
+                  <span>
+                    {isSubmitting ? "Publishing..." : "Publish Event"}
+                  </span>
                 </button>
               </div>
             )}
