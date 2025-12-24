@@ -25,9 +25,9 @@ interface EventData {
 
 export default function EventDetails() {
   const params = useParams();
-  console.log(params)
+  console.log(params);
   const slugId = params?.slugId as string;
-  console.log(slugId)
+  console.log(slugId);
   const eventId = slugId?.split("--").pop()!;
 
   const [event, setEvent] = useState<EventData | null>(null);
@@ -53,6 +53,17 @@ export default function EventDetails() {
 
     fetchEvent();
   }, [eventId]);
+
+  const handleShare = async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      // toast.success("Link copied!");
+    } catch (err) {
+      console.error("Copy failed", err);
+    }
+  };
 
   if (loading) {
     return (
@@ -85,7 +96,7 @@ export default function EventDetails() {
         </section>
 
         <button
-          onClick={() => navigator.clipboard.writeText(window?.location.href)}
+          onClick={handleShare}
           className="flex items-center gap-2 px-4 py-2 border rounded-full hover:bg-gray-100"
         >
           <Share2 className="h-4 w-4" /> Share
@@ -145,9 +156,7 @@ export default function EventDetails() {
         <div className="border rounded-xl p-4">
           <h3 className="font-semibold mb-2">Organised by</h3>
           <p className="font-medium">{event.organizerName}</p>
-          <p className="text-sm text-gray-500">
-            {event.organizerEmail}
-          </p>
+          <p className="text-sm text-gray-500">{event.organizerEmail}</p>
         </div>
       </aside>
     </main>

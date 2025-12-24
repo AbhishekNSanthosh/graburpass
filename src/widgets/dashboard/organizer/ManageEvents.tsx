@@ -23,6 +23,7 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "@/utils/configs/firebaseConfig";
 import Image from "next/image";
 import toast from "react-hot-toast";
+import { SITE_URL } from "@/utils/constants/constansts";
 
 /* ================= TYPES ================= */
 
@@ -42,8 +43,6 @@ interface Event {
 
 /* ================= HELPERS ================= */
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || window?.location.origin;
 
 function slugify(text: string) {
   return text
