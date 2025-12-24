@@ -1,248 +1,294 @@
-"use client"
-import React, { useState } from 'react';
+"use client";
+
+import React, { useEffect, useState } from "react";
 import {
   Calendar,
-  Image,
   Edit,
   Users,
   BarChart3,
   Copy,
+  Eye,
   Filter,
   ChevronDown,
-  Eye,
-} from 'lucide-react';
+} from "lucide-react";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { db } from "@/utils/configs/firebaseConfig";
+import Image from "next/image";
+import toast from "react-hot-toast";
+
+/* ================= TYPES ================= */
+
+type EventStatus = "draft" | "live" | "completed" | "cancelled";
 
 interface Event {
   id: string;
   name: string;
-  thumbnail: string;
-  date: string; // ISO date
-  status: 'draft' | 'live' | 'completed' | 'cancelled';
+  slug?: string;
+  shareUrl?: string;
+  thumbnail?: string;
+  date: string;
+  status: EventStatus;
   attendees: number;
   sales: number;
 }
 
+/* ================= HELPERS ================= */
+
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+/* ================= COMPONENT ================= */
+
 export default function ManageEvents() {
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'draft'>('all');
+  const [publishedEvents, setPublishedEvents] = useState<Event[]>([]);
+  const [draftEvents, setDraftEvents] = useState<Event[]>([]);
+  const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
+  const [statusFilter, setStatusFilter] = useState<"all" | "live">("all");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data
-  const allEvents: Event[] = [
-    {
-      id: '1',
-      name: 'React Conf 2026',
-      thumbnail: '/event-thumb-1.jpg', // Placeholder
-      date: '2026-01-15',
-      status: 'live',
-      attendees: 150,
-      sales: 124,
-    },
-    {
-      id: '2',
-      name: 'AI Workshop',
-      thumbnail: '/event-thumb-2.jpg',
-      date: '2025-12-20',
-      status: 'draft',
-      attendees: 0,
-      sales: 0,
-    },
-    {
-      id: '3',
-      name: 'Startup Meetup',
-      thumbnail: '/event-thumb-3.jpg',
-      date: '2025-11-10',
-      status: 'completed',
-      attendees: 45,
-      sales: 89,
-    },
-    {
-      id: '4',
-      name: 'Tech Seminar',
-      thumbnail: '/event-thumb-4.jpg',
-      date: '2026-02-05',
-      status: 'live',
-      attendees: 78,
-      sales: 67,
-    },
-    {
-      id: '5',
-      name: 'Dev Hackathon',
-      thumbnail: '/event-thumb-5.jpg',
-      date: '2025-10-01',
-      status: 'cancelled',
-      attendees: 0,
-      sales: 0,
-    },
-  ];
+  const now = Date.now();
 
-  const currentDate = new Date('2025-12-13').getTime();
-  const filteredEvents = allEvents
-    .filter(event => {
-      const eventDate = new Date(event.date).getTime();
-      const isUpcoming = eventDate >= currentDate;
-      if (activeTab === 'upcoming' && !isUpcoming) return false;
-      if (activeTab === 'past' && isUpcoming) return false;
-      if (statusFilter === 'live' && event.status !== 'live') return false;
-      if (statusFilter === 'draft' && event.status !== 'draft') return false;
-      return true;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  /* ================= FETCH EVENTS ================= */
 
-  const getStatusColor = (status: Event['status']) => {
+  useEffect(() => {
+    const auth = getAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user?.email) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
+      /* ---------- PUBLISHED EVENTS ---------- */
+      const publishedSnap = await getDocs(
+        query(
+          collection(db, "published_events"),
+          where("creatorEmail", "==", user.email)
+        )
+      );
+
+      const published: Event[] = publishedSnap.docs.map((docSnap) => {
+        const data = docSnap.data();
+        const eventDate = new Date(data.date).getTime();
+
+        return {
+          id: docSnap.id,
+          name: data.name,
+          slug: data.slug,
+          shareUrl: data.shareUrl,
+          thumbnail: data.posterUrl || "/default-event-thumb.jpg",
+          date: data.date,
+          status: eventDate >= now ? "live" : "completed",
+          attendees: data.attendees ?? 0,
+          sales: data.sales ?? 0,
+        };
+      });
+
+      /* ---------- DRAFT EVENTS ---------- */
+      const draftSnap = await getDocs(
+        query(
+          collection(db, "event_drafts"),
+          where("creatorEmail", "==", user.email)
+        )
+      );
+
+      const drafts: Event[] = draftSnap.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          name: data.name,
+          thumbnail: data.posterUrl || "/default-event-thumb.jpg",
+          date: data.date,
+          status: "draft",
+          attendees: 0,
+          sales: 0,
+        };
+      });
+
+      published.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      drafts.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      setPublishedEvents(published);
+      setDraftEvents(drafts);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  /* ================= SHARE HANDLER ================= */
+
+  const handleShare = async (event: Event) => {
+  const slug = event.slug || slugify(event.name);
+  const shareUrl = `${SITE_URL}/e/${slug}--${event.id}`;
+
+  const sharePromise = async () => {
+    // Save only once
+    if (!event.slug || !event.shareUrl) {
+      await updateDoc(doc(db, "published_events", event.id), {
+        slug,
+        shareUrl,
+      });
+
+      setPublishedEvents((prev) =>
+        prev.map((e) =>
+          e.id === event.id ? { ...e, slug, shareUrl } : e
+        )
+      );
+    }
+
+    await navigator.clipboard.writeText(shareUrl);
+    return shareUrl;
+  };
+
+  toast.promise(sharePromise(), {
+    loading: "Generating share link...",
+    success: "Event link copied!",
+    error: "Failed to generate share link",
+  });
+};
+
+
+  /* ================= FILTERING ================= */
+
+  const filteredPublishedEvents = publishedEvents.filter((event) => {
+    const eventDate = new Date(event.date).getTime();
+    const isUpcoming = eventDate >= now;
+
+    if (activeTab === "upcoming" && !isUpcoming) return false;
+    if (activeTab === "past" && isUpcoming) return false;
+    if (statusFilter === "live" && event.status !== "live") return false;
+
+    return true;
+  });
+
+  /* ================= HELPERS ================= */
+
+  const getStatusColor = (status: EventStatus) => {
     switch (status) {
-      case 'live': return 'bg-blue-100 text-blue-800';
-      case 'draft': return 'bg-yellow-100 text-yellow-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "live":
+        return "bg-blue-100 text-blue-800";
+      case "draft":
+        return "bg-yellow-100 text-yellow-800";
+      case "completed":
+        return "bg-green-100 text-green-800";
+      case "cancelled":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  const handleAction = (eventId: string, action: string) => {
-    console.log(`Action ${action} on event ${eventId}`);
-    // Mock: e.g., navigate to edit page
-  };
+  /* ================= LOADING ================= */
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin h-10 w-10 border-b-2 border-red-600 rounded-full" />
+      </div>
+    );
+  }
+
+  /* ================= UI ================= */
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Manage Events</h1>
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <button
-                onClick={() => setFilterOpen(!filterOpen)}
-                className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md"
-              >
-                <Filter className="h-4 w-4" />
-                <span>Filter</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {filterOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white shadow-lg rounded-md border z-10">
-                  <button
-                    onClick={() => { setStatusFilter('all'); setFilterOpen(false); }}
-                    className={`block w-full px-4 py-2 text-sm text-left ${statusFilter === 'all' ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => { setStatusFilter('live'); setFilterOpen(false); }}
-                    className={`block w-full px-4 py-2 text-sm text-left ${statusFilter === 'live' ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    Live
-                  </button>
-                  <button
-                    onClick={() => { setStatusFilter('draft'); setFilterOpen(false); }}
-                    className={`block w-full px-4 py-2 text-sm text-left ${statusFilter === 'draft' ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    Draft
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <h1 className="text-3xl font-bold mb-8">Manage Events</h1>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={`px-6 py-4 text-sm font-medium border-b-2 ${
-              activeTab === 'upcoming'
-                ? 'border-red-500 text-red-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Upcoming
-          </button>
-          <button
-            onClick={() => setActiveTab('past')}
-            className={`px-6 py-4 text-sm font-medium border-b-2 ${
-              activeTab === 'past'
-                ? 'border-red-500 text-red-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Past
-          </button>
-        </div>
-
-        {/* Events List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {filteredEvents.length === 0 ? (
-            <div className="text-center py-12">
-              <Image className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
-              <p className="text-sm text-gray-500">Create your first event to get started.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredEvents.map(event => (
-                <div key={event.id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 flex-1">
-                      <img
-                        src={event.thumbnail || '/default-event-thumb.jpg'}
-                        alt={event.name}
-                        className="w-16 h-16 rounded-lg object-cover"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 truncate">{event.name}</h3>
-                        <p className="text-sm text-gray-500 flex items-center space-x-1">
-                          <Calendar className="h-4 w-4" />
-                          <span>{new Date(event.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                        </p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      <button
-                        onClick={() => handleAction(event.id, 'edit')}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Edit"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleAction(event.id, 'attendees')}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="View Attendees"
-                      >
-                        <Users className="h-4 w-4" />
-                        <span className="sr-only">View Attendees ({event.attendees})</span>
-                      </button>
-                      <button
-                        onClick={() => handleAction(event.id, 'analytics')}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="View Analytics"
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                        <span className="sr-only">View Analytics (Sales: {event.sales})</span>
-                      </button>
-                      <button
-                        onClick={() => handleAction(event.id, 'duplicate')}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Duplicate"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleAction(event.id, 'view')}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Preview"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+        {/* Draft Events */}
+        {draftEvents.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-lg font-semibold mb-4">Draft Events</h2>
+            <div className="bg-white border rounded-xl divide-y">
+              {draftEvents.map((event) => (
+                <div key={event.id} className="p-6 flex justify-between">
+                  <div className="flex gap-4">
+                    <img
+                      src={event.thumbnail}
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                    <div>
+                      <h3 className="font-semibold">{event.name}</h3>
+                      <span className="text-sm text-yellow-600">Draft</span>
                     </div>
                   </div>
+                  <button className="px-4 py-2 text-sm border rounded-md text-red-600">
+                    Continue Editing
+                  </button>
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Published Events */}
+        <div className="bg-white border rounded-xl divide-y">
+          {filteredPublishedEvents.length === 0 ? (
+            <div className="py-12 text-center text-gray-500">
+              No events found
+            </div>
+          ) : (
+            filteredPublishedEvents.map((event) => (
+              <div key={event.id} className="p-6 flex justify-between">
+                <div className="flex gap-4">
+                  <Image
+                    alt=""
+                    width={64}
+                    height={64}
+                    src={event.thumbnail || ""}
+                    className="rounded-lg object-cover"
+                  />
+                  <div>
+                    <h3 className="font-semibold">{event.name}</h3>
+                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      {new Date(event.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span
+                    className={`px-3 py-1 text-xs rounded-full h-fit ${getStatusColor(
+                      event.status
+                    )}`}
+                  >
+                    {event.status}
+                  </span>
+                </div>
+
+                <div className="flex gap-4 text-gray-500">
+                  <Edit className="h-4 w-4 cursor-pointer" />
+                  <Users className="h-4 w-4 cursor-pointer" />
+                  <BarChart3 className="h-4 w-4 cursor-pointer" />
+                  <Copy
+                    className="h-4 w-4 cursor-pointer hover:text-black"
+                    onClick={() => handleShare(event)}
+                  />
+                  <Eye className="h-4 w-4 cursor-pointer" />
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>

@@ -28,13 +28,7 @@ export default function Sidebar() {
       
       {/* Logo */}
       <div className="w-full flex items-center justify-center pt-[5vh] pb-[3vh]">
-        <Image
-          src="/logo.svg"
-          alt="logo"
-          width={120}
-          height={40}
-          priority
-        />
+       <span className="text-primary font-bold text-xl"> Graburpass</span>
       </div>
 
       {/* Sections */}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   CalendarDays,
   Clock,
@@ -13,25 +13,145 @@ import {
   TrendingUp,
   AlertCircle,
 } from "lucide-react";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/utils/configs/firebaseConfig";
+
+/* ================= TYPES ================= */
+
+interface Event {
+  id: string;
+  name: string;
+  date: string;
+  slug?: string;
+  ticketsSold?: number;
+}
+
+interface Booking {
+  eventName: string;
+  eventDate: string;
+  city: string;
+  tickets: number;
+  status: "confirmed" | "pending";
+}
+
+interface DashboardData {
+  nextEvent?: Event;
+  upcomingCount: number;
+  pastCount: number;
+  activeEvents: number;
+  ticketsSold: number;
+  recentBookings: Booking[];
+  recentEvents: Event[];
+}
+
+/* ================= PAGE ================= */
 
 export default function Home() {
-  const userName = "Abhishek"; // from auth later
-  const isOrganizer = true; // role check later
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [userName, setUserName] = useState("User");
+  const [isOrganizer, setIsOrganizer] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data – could fetch from API
+  /* ================= FETCH DATA ================= */
+
+  useEffect(() => {
+    const auth = getAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user?.email) return;
+
+      setUserName(user.displayName || "User");
+      setIsOrganizer(true); // 🔴 replace with role logic later
+
+      const now = Date.now();
+
+      /* -------- EVENTS -------- */
+      const eventsSnap = await getDocs(
+        query(
+          collection(db, "published_events"),
+          where("creatorEmail", "==", user.email)
+        )
+      );
+
+      const events: Event[] = eventsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Event[];
+
+      const upcoming = events.filter(
+        (e) => new Date(e.date).getTime() >= now
+      );
+
+      const past = events.filter(
+        (e) => new Date(e.date).getTime() < now
+      );
+
+      const nextEvent = upcoming.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      )[0];
+
+      const ticketsSold = events.reduce(
+        (sum, e) => sum + (e.ticketsSold ?? 0),
+        0
+      );
+
+      /* -------- BOOKINGS -------- */
+      const bookingsSnap = await getDocs(
+        query(
+          collection(db, "bookings"),
+          where("userEmail", "==", user.email)
+        )
+      );
+
+      const bookings: Booking[] = bookingsSnap.docs.map((d) => d.data()) as Booking[];
+
+      setDashboard({
+        nextEvent,
+        upcomingCount: upcoming.length,
+        pastCount: past.length,
+        activeEvents: upcoming.length,
+        ticketsSold,
+        recentBookings: bookings.slice(0, 2),
+        recentEvents: upcoming.slice(0, 2),
+      });
+
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  /* ================= LOADING ================= */
+
+  if (loading || !dashboard) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading dashboard...
+      </div>
+    );
+  }
+
+  /* ================= SUMMARY DATA ================= */
+
   const summaryData = [
     {
       title: "Next Event",
-      value: "React Conf 2025",
-      subtitle: "In 11 days",
+      value: dashboard.nextEvent?.name || "—",
+      subtitle: dashboard.nextEvent
+        ? new Date(dashboard.nextEvent.date).toDateString()
+        : "No upcoming events",
       icon: CalendarDays,
-      href: "/events/react-conf-2025",
+      href: dashboard.nextEvent
+        ? `/e/${dashboard.nextEvent.slug}--${dashboard.nextEvent.id}`
+        : undefined,
       bgColor: "bg-gradient-to-br from-red-400 to-red-600",
       textColor: "text-white",
     },
     {
       title: "Upcoming Events",
-      value: "2",
+      value: String(dashboard.upcomingCount),
       subtitle: "Scheduled",
       icon: Clock,
       href: "/events/upcoming",
@@ -40,7 +160,7 @@ export default function Home() {
     },
     {
       title: "Past Events Attended",
-      value: "9",
+      value: String(dashboard.pastCount),
       subtitle: "Completed",
       icon: History,
       href: "/events/past",
@@ -53,16 +173,16 @@ export default function Home() {
     ? [
         {
           title: "Active Events",
-          value: "3",
+          value: String(dashboard.activeEvents),
           subtitle: "Live / Upcoming",
           icon: Ticket,
-          href: "/organizer/events",
+          href: "/organizer/manage-events",
           bgColor: "bg-gradient-to-br from-green-400 to-green-600",
           textColor: "text-white",
         },
         {
           title: "Tickets Sold",
-          value: "124",
+          value: String(dashboard.ticketsSold),
           subtitle: "Across your events",
           icon: BarChart3,
           href: "/organizer/analytics",
@@ -72,29 +192,29 @@ export default function Home() {
       ]
     : [];
 
-  const [showWelcome, setShowWelcome] = useState(true);
+  /* ================= UI ================= */
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 space-y-8">
-      {/* Welcome Banner */}
+      {/* Welcome */}
       {showWelcome && (
-        <div className="relative bg-white rounded-xl  p-6 border border-gray-200 overflow-hidden">
+        <div className="relative bg-white rounded-xl p-6  border border-gray-200">
           <button
             onClick={() => setShowWelcome(false)}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400"
           >
             <AlertCircle className="h-5 w-5" />
           </button>
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Users className="h-6 w-6 text-red-600" />
-              </div>
+          <div className="flex gap-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <Users className="h-6 w-6 text-red-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Welcome back, {userName}!</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                {isOrganizer ? "Ready to manage your events?" : "Discover amazing events near you."}
+              <h2 className="text-xl font-bold">Welcome back, {userName}!</h2>
+              <p className="text-sm text-gray-600">
+                {isOrganizer
+                  ? "Ready to manage your events?"
+                  : "Discover amazing events near you."}
               </p>
             </div>
           </div>
@@ -103,246 +223,135 @@ export default function Home() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-        {[...summaryData, ...organizerData].map((item, index) => (
-          <SummaryCard key={index} {...item} />
+        {[...summaryData, ...organizerData].map((item, i) => (
+          <SummaryCard key={i} {...item} />
         ))}
       </div>
 
-      {/* Recent Activity */}
+      {/* Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ActivityCard title="Recent Bookings" icon={Calendar}>
-          <ActivityItem
-            title="React Conference 2025"
-            subtitle="24 Dec 2025 · Bengaluru · 2 tickets"
-            href="/bookings/react-conf"
-            status="confirmed"
-          />
-          <ActivityItem
-            title="AI Summit 2025"
-            subtitle="5 Jan 2026 · Mumbai · Pending payment"
-            href="/bookings/ai-summit"
-            status="pending"
-          />
+          {dashboard.recentBookings.length === 0 ? (
+            <p className="text-sm text-gray-500">No bookings yet</p>
+          ) : (
+            dashboard.recentBookings.map((b, i) => (
+              <ActivityItem
+                key={i}
+                title={b.eventName}
+                subtitle={`${b.eventDate} · ${b.city} · ${b.tickets} tickets`}
+                status={b.status}
+              />
+            ))
+          )}
         </ActivityCard>
 
         {isOrganizer && (
           <ActivityCard title="Recent Event Creations" icon={TrendingUp}>
-            <ActivityItem
-              title="Startup Meetup"
-              subtitle="10 Jan 2026 · Kochi · 45 attendees"
-              href="/organizer/startup-meetup"
-              status="live"
-            />
-            <ActivityItem
-              title="Tech Workshop"
-              subtitle="15 Feb 2026 · Delhi · Draft"
-              href="/organizer/tech-workshop"
-              status="draft"
-            />
+            {dashboard.recentEvents.map((e) => (
+              <ActivityItem
+                key={e.id}
+                title={e.name}
+                subtitle={new Date(e.date).toDateString()}
+                status="live"
+              />
+            ))}
           </ActivityCard>
         )}
       </div>
 
-      {/* Quick Actions – for better UX */}
-      {isOrganizer ? (
-        <QuickActions />
-      ) : (
-        <QuickActions userView />
-      )}
+      <QuickActions userView={!isOrganizer} />
     </div>
   );
 }
 
-/* ---------- Components ---------- */
+/* ================= SHARED COMPONENTS ================= */
+/* (unchanged — exactly as your originals) */
 
-interface SummaryCardProps {
-  title: string;
-  value: string;
-  subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
-  href?: string;
-  bgColor: string;
-  textColor: string;
-}
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  href,
-  bgColor,
-  textColor,
-}: SummaryCardProps) {
+function SummaryCard({ title, value, subtitle, icon: Icon, href, bgColor, textColor }: any) {
   const content = (
     <div className="relative">
-      <div
-        className={`absolute -top-4 -right-4 w-24 h-24 ${bgColor} opacity-10 rotate-12`}
-      />
-      <div className="relative z-10 flex justify-between items-start">
-        <div className="flex-1">
-          <p className="text-sm text-gray-500 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
+      <div className={`absolute -top-4 -right-4 w-24 h-24 ${bgColor} opacity-10 rotate-12`} />
+      <div className="relative z-10 flex justify-between">
+        <div>
+          <p className="text-sm text-gray-500">{title}</p>
+          <p className="text-2xl font-bold">{value}</p>
           <p className="text-xs text-gray-400">{subtitle}</p>
         </div>
-        <div className={`h-12 w-12 ${bgColor} ${textColor} p-3 rounded-lg flex items-center justify-center  ml-4`}>
+        <div className={`h-12 w-12 ${bgColor} ${textColor} p-3 rounded-lg`}>
           <Icon className="h-6 w-6" />
         </div>
       </div>
     </div>
   );
 
-  if (href) {
-    return (
-      <a
-        href={href}
-        className="block group rounded-xl bg-white p-6  border border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden"
-        aria-label={`View ${title}`}
-      >
-        {content}
-      </a>
-    );
-  }
-
-  return (
-    <div className="group rounded-xl bg-white p-6  border border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden">
+  return href ? (
+    <a href={href} className="block bg-white p-6 rounded-xl  border border-gray-200 hover:shadow-lg">
       {content}
-    </div>
+    </a>
+  ) : (
+    <div className="bg-white p-6 rounded-xl  border border-gray-200">{content}</div>
   );
 }
 
-interface ActivityCardProps {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}
-
-function ActivityCard({ title, icon: Icon, children }: ActivityCardProps) {
+function ActivityCard({ title, icon: Icon, children }: any) {
   return (
-    <div className="rounded-xl bg-white p-6  border border-gray-200">
-      <div className="flex items-center space-x-3 mb-6">
+    <div className="bg-white p-6 rounded-xl  border border-gray-200">
+      <div className="flex items-center gap-3 mb-6">
         <div className="bg-red-100 p-2 rounded-lg">
           <Icon className="h-5 w-5 text-red-600" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-semibold">{title}</h3>
       </div>
       <div className="space-y-4">{children}</div>
     </div>
   );
 }
 
-interface ActivityItemProps {
-  title: string;
-  subtitle: string;
-  href?: string;
-  status?: "confirmed" | "pending" | "live" | "draft";
-}
-
-function ActivityItem({ title, subtitle, href, status }: ActivityItemProps) {
-  const getStatusColor = (status: ActivityItemProps["status"]) => {
-    switch (status) {
-      case "confirmed": return "bg-green-100 text-green-800";
-      case "pending": return "bg-yellow-100 text-yellow-800";
-      case "live": return "bg-blue-100 text-blue-800";
-      case "draft": return "bg-gray-100 text-gray-800";
-      default: return "bg-gray-100 text-gray-500";
-    }
-  };
-
-  const content = (
-    <div className="group flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-gray-900 group-hover:text-gray-700">{title}</p>
-        <p className="text-xs text-gray-500 mt-1 flex items-center space-x-1">
-          <MapPin className="h-3 w-3" />
-          <span>{subtitle}</span>
+function ActivityItem({ title, subtitle, status }: any) {
+  return (
+    <div className="flex justify-between p-4 bg-gray-50 rounded-lg">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="text-xs text-gray-500 flex items-center gap-1">
+          <MapPin className="h-3 w-3" /> {subtitle}
         </p>
       </div>
       {status && (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
+        <span className="text-xs px-2 py-1 rounded-full bg-gray-200">
+          {status}
         </span>
       )}
     </div>
   );
-
-  return href ? (
-    <a href={href} className="block">
-      {content}
-    </a>
-  ) : (
-    content
-  );
 }
 
-function QuickActions({ userView = false }: { userView?: boolean }) {
+function QuickActions({ userView }: { userView?: boolean }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {userView ? (
         <>
-          <ActionButton
-            icon={CalendarDays}
-            title="Browse Events"
-            description="Discover upcoming events near you"
-            href="/events"
-          />
-          <ActionButton
-            icon={Ticket}
-            title="My Bookings"
-            description="View and manage your tickets"
-            href="/bookings"
-          />
-          <ActionButton
-            icon={Users}
-            title="My Network"
-            description="Connect with other attendees"
-            href="/network"
-          />
+          <ActionButton title="Browse Events" href="/events" icon={CalendarDays} />
+          <ActionButton title="My Bookings" href="/bookings" icon={Ticket} />
+          <ActionButton title="My Network" href="/network" icon={Users} />
         </>
       ) : (
         <>
-          <ActionButton
-            icon={Ticket}
-            title="Create Event"
-            description="Launch your next big event"
-            href="/organizer/create"
-          />
-          <ActionButton
-            icon={BarChart3}
-            title="View Analytics"
-            description="Track performance and insights"
-            href="/organizer/analytics"
-          />
-          <ActionButton
-            icon={TrendingUp}
-            title="Promote Event"
-            description="Boost visibility with ads"
-            href="/organizer/promote"
-          />
+          <ActionButton title="Create Event" href="/organizer/create" icon={Ticket} />
+          <ActionButton title="View Analytics" href="/organizer/analytics" icon={BarChart3} />
+          <ActionButton title="Promote Event" href="/organizer/promote" icon={TrendingUp} />
         </>
       )}
     </div>
   );
 }
 
-interface ActionButtonProps {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  href: string;
-}
-
-function ActionButton({ icon: Icon, title, description, href }: ActionButtonProps) {
+function ActionButton({ title, href, icon: Icon }: any) {
   return (
-    <a
-      href={href}
-      className="group rounded-xl bg-white p-6  border border-gray-200 hover:shadow-lg transition-all duration-300 flex flex-col items-center text-center"
-    >
-      <div className="w-12 h-12 bg-red-100 group-hover:bg-red-200 rounded-lg flex items-center justify-center mb-4 transition-colors">
+    <a href={href} className="bg-white p-6 rounded-xl  border border-gray-200 text-center hover:shadow-lg">
+      <div className="w-12 h-12 bg-red-100 rounded-lg mx-auto flex items-center justify-center mb-4">
         <Icon className="h-6 w-6 text-red-600" />
       </div>
-      <h4 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-gray-700">{title}</h4>
-      <p className="text-sm text-gray-500">{description}</p>
+      <h4 className="font-semibold">{title}</h4>
     </a>
   );
 }

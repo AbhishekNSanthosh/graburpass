@@ -15,6 +15,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  User,
 } from "lucide-react";
 import {
   addDoc,
@@ -28,11 +29,26 @@ import { db, storage } from "@/utils/configs/firebaseConfig";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { getAuth } from "firebase/auth";
 
 interface TicketType {
   name: string;
   price: number;
   quantity: number;
+}
+
+type TicketTypeInput = {
+  name: string;
+  price: number | "";
+  quantity: number | "";
+};
+
+interface RegistrationField {
+  id: string;
+  label: string;
+  type: "text" | "email" | "tel" | "number" | "textarea" | "select";
+  required: boolean;
+  options?: string[];
 }
 
 interface EventFormData {
@@ -45,7 +61,9 @@ interface EventFormData {
   venueAddress: string;
   onlineLink: string;
   isPaid: boolean;
-  ticketTypes: TicketType[];
+  platformFeePayer: "organizer" | "buyer";
+  ticketTypes: TicketTypeInput[]; // ✅ INPUT TYPE
+  registrationFields: RegistrationField[];
   poster: File | null;
   posterPreview: string | null;
 }
@@ -65,10 +83,21 @@ export default function NewEvent() {
     venueAddress: "",
     onlineLink: "",
     isPaid: false,
-    ticketTypes: [{ name: "General", price: 0, quantity: 100 }],
+    platformFeePayer: "buyer",
+    ticketTypes: [{ name: "General", price: "", quantity: "" }],
+    registrationFields: [
+      { id: "firstName", label: "First Name", type: "text", required: true },
+      { id: "lastName", label: "Last Name", type: "text", required: true },
+      { id: "email", label: "Email", type: "email", required: true },
+      { id: "phone", label: "Phone Number", type: "tel", required: true },
+    ],
     poster: null,
     posterPreview: null,
   });
+
+  const auth = getAuth();
+  const user = auth.currentUser;
+
   console.log(formData);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -90,7 +119,7 @@ export default function NewEvent() {
     updateFormData({
       ticketTypes: [
         ...formData.ticketTypes,
-        { name: "New Ticket", price: 0, quantity: 100 },
+        { name: "New Ticket", price: "", quantity: "" },
       ],
     });
   };
@@ -103,10 +132,44 @@ export default function NewEvent() {
     }
   };
 
-  const updateTicketType = (index: number, updates: Partial<TicketType>) => {
+  const updateTicketType = (
+    index: number,
+    updates: Partial<TicketTypeInput>
+  ) => {
     const newTypes = [...formData.ticketTypes];
     newTypes[index] = { ...newTypes[index], ...updates };
     updateFormData({ ticketTypes: newTypes });
+  };
+
+  const addRegistrationField = () => {
+    updateFormData({
+      registrationFields: [
+        ...formData.registrationFields,
+        {
+          id: `custom_${Date.now()}`,
+          label: "",
+          type: "text",
+          required: false,
+        },
+      ],
+    });
+  };
+
+  const removeRegistrationField = (index: number) => {
+    updateFormData({
+      registrationFields: formData.registrationFields.filter(
+        (_, i) => i !== index
+      ),
+    });
+  };
+
+  const updateRegistrationField = (
+    index: number,
+    updates: Partial<RegistrationField>
+  ) => {
+    const newFields = [...formData.registrationFields];
+    newFields[index] = { ...newFields[index], ...updates };
+    updateFormData({ registrationFields: newFields });
   };
 
   const handlePosterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,7 +199,10 @@ export default function NewEvent() {
           venueAddress: formData.venueAddress,
           onlineLink: formData.onlineLink,
           isPaid: formData.isPaid,
+          platformFeePayer: formData.platformFeePayer,
           ticketTypes: formData.ticketTypes,
+          registrationFields: formData.registrationFields,
+          creatorEmail: user?.email,
           updatedAt: serverTimestamp(),
         });
       } else {
@@ -151,8 +217,11 @@ export default function NewEvent() {
           venueAddress: formData.venueAddress,
           onlineLink: formData.onlineLink,
           isPaid: formData.isPaid,
+          platformFeePayer: formData.platformFeePayer,
           ticketTypes: formData.ticketTypes,
+          registrationFields: formData.registrationFields,
           posterUrl: null,
+          creatorEmail: user?.email,
           status: "draft",
           createdAt: serverTimestamp(),
         });
@@ -206,7 +275,10 @@ export default function NewEvent() {
         venueAddress: formData.venueAddress,
         onlineLink: formData.onlineLink,
         isPaid: formData.isPaid,
+        platformFeePayer: formData.platformFeePayer,
         ticketTypes: formData.ticketTypes,
+        creatorEmail: user?.email,
+        registrationFields: formData.registrationFields,
         status: "published",
       };
 
@@ -268,8 +340,9 @@ export default function NewEvent() {
     { id: 2, title: "Date & Time", icon: Clock },
     { id: 3, title: "Location", icon: MapPin },
     { id: 4, title: "Ticket Setup", icon: Ticket },
-    { id: 5, title: "Media", icon: Image },
-    { id: 6, title: "Publish", icon: Check },
+    { id: 5, title: "Registration Form", icon: User },
+    { id: 6, title: "Media", icon: Image },
+    { id: 7, title: "Publish", icon: Check },
   ];
 
   const isValidStep = (currentStep: number) => {
@@ -283,9 +356,13 @@ export default function NewEvent() {
           ? formData.venueAddress
           : formData.onlineLink;
       case 4:
-        return formData.ticketTypes.every((t) => t.name && t.quantity > 0);
+        return formData.ticketTypes.every(
+          (t) => t.name && Number(t.quantity) > 0
+        );
       case 5:
-        return true; // Optional
+        return true; // Registration fields are customizable, always valid
+      case 6:
+        return true; // Media optional
       default:
         return true;
     }
@@ -491,85 +568,189 @@ export default function NewEvent() {
                 <Ticket className="h-6 w-6 mr-2 text-red-600" />
                 Ticket Setup
               </h2>
-              <div className="flex items-center space-x-4 mb-4">
-                <button
-                  onClick={() => updateFormData({ isPaid: false })}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
-                    !formData.isPaid
-                      ? "bg-red-600 text-white"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  <span>Free</span>
-                </button>
-                <button
-                  onClick={() => updateFormData({ isPaid: true })}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-md ${
-                    formData.isPaid
-                      ? "bg-red-600 text-white"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  <span>Paid</span>
-                </button>
-              </div>
-              {formData.isPaid && (
-                <div className="text-sm text-gray-600 mb-4">
-                  Add ticket types below.
-                </div>
-              )}
-              <div className="space-y-4">
-                {formData.ticketTypes.map((ticket, index) => (
-                  <div
-                    key={index}
-                    className="flex items-end space-x-4 p-4 bg-gray-50 rounded-md"
+
+              {/* Free / Paid */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Is this a paid event?
+                </label>
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={() => updateFormData({ isPaid: false })}
+                    className={`px-4 py-2 rounded-md ${
+                      !formData.isPaid
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
                   >
-                    <div className="flex-1 space-y-2">
-                      <input
-                        type="text"
-                        value={ticket.name}
-                        onChange={(e) =>
-                          updateTicketType(index, { name: e.target.value })
-                        }
-                        placeholder="Ticket Name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                      />
-                      <div className="grid grid-cols-2 gap-4">
-                        <input
-                          type="number"
-                          value={ticket.price}
-                          onChange={(e) =>
-                            updateTicketType(index, {
-                              price: Number(e.target.value) || 0,
-                            })
-                          }
-                          placeholder="Price ($)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                        />
-                        <input
-                          type="number"
-                          value={ticket.quantity}
-                          onChange={(e) =>
-                            updateTicketType(index, {
-                              quantity: Number(e.target.value) || 0,
-                            })
-                          }
-                          placeholder="Quantity"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                        />
-                      </div>
-                    </div>
+                    Free
+                  </button>
+                  <button
+                    onClick={() => updateFormData({ isPaid: true })}
+                    className={`px-4 py-2 rounded-md ${
+                      formData.isPaid
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    Paid
+                  </button>
+                </div>
+              </div>
+
+              {/* Platform Fee Payer */}
+              {formData.isPaid && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Who pays the platform service fee?
+                  </label>
+                  <div className="flex space-x-4">
                     <button
-                      onClick={() => removeTicketType(index)}
-                      className="p-2 text-red-600 hover:text-red-800"
+                      onClick={() =>
+                        updateFormData({ platformFeePayer: "organizer" })
+                      }
+                      className={`px-4 py-2 rounded-md text-sm ${
+                        formData.platformFeePayer === "organizer"
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      Me (Organizer)
+                    </button>
+                    <button
+                      onClick={() =>
+                        updateFormData({ platformFeePayer: "buyer" })
+                      }
+                      className={`px-4 py-2 rounded-md text-sm ${
+                        formData.platformFeePayer === "buyer"
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      Buyer
                     </button>
                   </div>
-                ))}
+                </div>
+              )}
+
+              {/* Ticket Types */}
+              <div className="space-y-4">
+                {formData.ticketTypes.map((ticket, index) => {
+                  const price = Number(ticket.price) || 0;
+                  const quantity = Number(ticket.quantity) || 0;
+
+                  const fee = Math.round(price * 0.04 * 100) / 100;
+                  const buyerPays =
+                    formData.platformFeePayer === "buyer" ? price + fee : price;
+                  const organizerGets =
+                    formData.platformFeePayer === "buyer" ? price : price - fee;
+
+                  return (
+                    <div
+                      key={index}
+                      className="p-4 bg-gray-50 rounded-md space-y-4"
+                    >
+                      {/* Ticket Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Ticket Name
+                        </label>
+                        <input
+                          type="text"
+                          value={ticket.name}
+                          onChange={(e) =>
+                            updateTicketType(index, { name: e.target.value })
+                          }
+                          placeholder="Eg: Premium, VIP"
+                          className="w-full px-3 py-2 border rounded-md"
+                        />
+                      </div>
+
+                      {/* Price & Quantity */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Ticket Price (₹)
+                          </label>
+                          <input
+                            type="number"
+                            value={ticket.price}
+                            onChange={(e) =>
+                              updateTicketType(index, {
+                                price:
+                                  e.target.value === ""
+                                    ? ""
+                                    : Number(e.target.value),
+                              })
+                            }
+                            placeholder="Eg: 100"
+                            className="w-full px-3 py-2 border rounded-md"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Total Quantity
+                          </label>
+                          <input
+                            type="number"
+                            value={ticket.quantity}
+                            onChange={(e) =>
+                              updateTicketType(index, {
+                                quantity:
+                                  e.target.value === ""
+                                    ? ""
+                                    : Number(e.target.value),
+                              })
+                            }
+                            placeholder="Eg: 50"
+                            className="w-full px-3 py-2 border rounded-md"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Cost Breakdown */}
+                      {formData.isPaid && price > 0 && (
+                        <div className="bg-gray-100 rounded-md p-3 text-sm">
+                          <h4 className="font-medium mb-2">
+                            Ticket Cost Breakdown
+                          </h4>
+                          <div className="space-y-1 text-gray-700">
+                            <div className="flex justify-between">
+                              <span>Ticket Price</span>
+                              <span>₹{price}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Platform Fee (5%)</span>
+                              <span>₹{fee}</span>
+                            </div>
+                            <hr />
+                            <div className="flex justify-between font-medium">
+                              <span>Amount Paid by Buyer</span>
+                              <span>₹{buyerPays}</span>
+                            </div>
+                            <div className="flex justify-between font-medium">
+                              <span>Amount You Receive</span>
+                              <span>₹{organizerGets}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Remove */}
+                      <button
+                        onClick={() => removeTicketType(index)}
+                        className="text-red-600 text-sm hover:underline"
+                      >
+                        Remove Ticket
+                      </button>
+                    </div>
+                  );
+                })}
+
                 <button
                   onClick={addTicketType}
-                  className="flex items-center space-x-2 text-red-600 hover:text-red-800 text-sm font-medium"
+                  className="flex items-center space-x-2 text-red-600 text-sm font-medium"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add Ticket Type</span>
@@ -579,6 +760,103 @@ export default function NewEvent() {
           )}
 
           {step === 5 && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                <User className="h-6 w-6 mr-2 text-red-600" />
+                Registration Form
+              </h2>
+              <p className="text-sm text-gray-600">
+                Customize the fields attendees will fill when registering for
+                your event.
+              </p>
+              <div className="space-y-4">
+                {formData.registrationFields.map((field, index) => (
+                  <div
+                    key={field.id}
+                    className="flex items-end space-x-4 p-4 bg-gray-50 rounded-md"
+                  >
+                    <div className="flex-1 space-y-2">
+                      <input
+                        type="text"
+                        value={field.label}
+                        onChange={(e) =>
+                          updateRegistrationField(index, {
+                            label: e.target.value,
+                          })
+                        }
+                        placeholder="Field Label"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                      <div className="grid grid-cols-2 gap-4 items-end">
+                        <select
+                          value={field.type}
+                          onChange={(e) =>
+                            updateRegistrationField(index, {
+                              type: e.target.value as RegistrationField["type"],
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        >
+                          <option value="text">Text</option>
+                          <option value="email">Email</option>
+                          <option value="tel">Phone</option>
+                          <option value="number">Number</option>
+                          <option value="textarea">Textarea</option>
+                          <option value="select">Select</option>
+                        </select>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={field.required}
+                            onChange={(e) =>
+                              updateRegistrationField(index, {
+                                required: e.target.checked,
+                              })
+                            }
+                            className="rounded"
+                          />
+                          <span className="text-sm text-gray-700">
+                            Required
+                          </span>
+                        </label>
+                      </div>
+                      {field.type === "select" && (
+                        <textarea
+                          value={field.options?.join(", ") || ""}
+                          onChange={(e) =>
+                            updateRegistrationField(index, {
+                              options: e.target.value
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="Options separated by commas (e.g., Option 1, Option 2)"
+                          rows={2}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeRegistrationField(index)}
+                      className="p-2 text-red-600 hover:text-red-800"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={addRegistrationField}
+                  className="flex items-center space-x-2 text-red-600 hover:text-red-800 text-sm font-medium"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Field</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center">
                 <Image className="h-6 w-6 mr-2 text-red-600" />
@@ -624,7 +902,7 @@ export default function NewEvent() {
             </div>
           )}
 
-          {step === 6 && (
+          {step === 7 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center">
                 <Check className="h-6 w-6 mr-2 text-red-600" />
@@ -647,7 +925,7 @@ export default function NewEvent() {
 
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-            {step < 6 ? (
+            {step < 7 ? (
               <>
                 <button
                   onClick={() => setStep(Math.max(1, step - 1))}
@@ -666,7 +944,7 @@ export default function NewEvent() {
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  {step === 5 ? "Next: Publish" : "Next"}
+                  {step === 6 ? "Next: Publish" : "Next"}
                   <ChevronRight className="h-4 w-4 inline ml-2" />
                 </button>
               </>
