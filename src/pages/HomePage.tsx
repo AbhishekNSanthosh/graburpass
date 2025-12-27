@@ -27,7 +27,9 @@ export default function HomePage() {
               <h3 className="text-xl font-semibold text-gray-900">Starter</h3>
               <p className="text-gray-500 mt-2">For small events</p>
               <p className="text-3xl font-bold text-red-500 mt-4">₹0</p>
-              <p className="text-sm text-gray-500">+ platform fee per ticket</p>
+              <p className="text-sm text-gray-500">
+                + 2% platform fee per ticket
+              </p>
 
               <ul className="mt-6 space-y-2 text-sm text-gray-600">
                 <li>✔ Event listing</li>
@@ -42,7 +44,9 @@ export default function HomePage() {
               <h3 className="text-xl font-semibold text-gray-900">Pro</h3>
               <p className="text-gray-500 mt-2">For growing events</p>
               <p className="text-3xl font-bold text-red-500 mt-4">Custom</p>
-              <p className="text-sm text-gray-500">Contact us for pricing</p>
+              <p className="text-sm text-gray-500">
+                + 2% platform fee per ticket
+              </p>
 
               <ul className="mt-6 space-y-2 text-sm text-gray-600">
                 <li>✔ Everything in Starter</li>
@@ -59,7 +63,9 @@ export default function HomePage() {
               </h3>
               <p className="text-gray-500 mt-2">Large & recurring events</p>
               <p className="text-3xl font-bold text-red-500 mt-4">Custom</p>
-              <p className="text-sm text-gray-500">Tailored solutions</p>
+              <p className="text-sm text-gray-500">
+                + 2% platform fee per ticket
+              </p>
 
               <ul className="mt-6 space-y-2 text-sm text-gray-600">
                 <li>✔ Custom integrations</li>
@@ -71,6 +77,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
       <Footer />
     </main>
   );
