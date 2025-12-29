@@ -9,7 +9,7 @@ import { auth } from "@/utils/configs/firebaseConfig";
 
 const navItems = [
   { title: "events", to: "/events" },
-  { title: "pricing", to: "#pricing" },
+  { title: "pricing", to: "/#pricing" },
   { title: "contact", to: "/contact" },
 ];
 

@@ -1,13 +1,12 @@
-import Footer from '@/widgets/common/Footer';
-import Header from '@/widgets/common/Header';
-import React from 'react';
+import Footer from "@/widgets/common/Footer";
+import Header from "@/widgets/common/Header";
+import React from "react";
 
 export default function page() {
   return (
     <main className="bg-white">
-        <Header/>
+      <Header />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-[14vh]">
-
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-3xl font-bold text-gray-900">Contact Us</h1>
@@ -17,7 +16,9 @@ export default function page() {
         </div>
 
         <div className="bg-gray-50 rounded-xl p-8 space-y-8 text-sm text-gray-700">
-
+          <div>
+            <p>Abhishek S</p>
+          </div>
           {/* Platform Info */}
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">
@@ -46,9 +47,12 @@ export default function page() {
               Registered Address
             </h2>
             <p>
-              78, Nalpathil Chira<br />
-              Payattupakka, Veliyanadu<br />
-              Alappuzha, Kerala – 686534<br />
+              78, Nalpathil Chira
+              <br />
+              Payattupakka, Veliyanadu
+              <br />
+              Alappuzha, Kerala – 686534
+              <br />
               India
             </p>
           </div>
@@ -61,10 +65,9 @@ export default function page() {
             <p>📞 Phone: +91 7907247909</p>
             <p>📧 Email: reach.abhisheksanthosh@gmail.com</p>
           </div>
-
         </div>
       </div>
-      <Footer/>
+      <Footer />
     </main>
   );
 }
