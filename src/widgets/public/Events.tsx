@@ -36,31 +36,39 @@ export default function Events() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        // Removed orderBy to avoid composite index requirement; sort in client
         const snap = await getDocs(
           query(
             collection(db, "published_events"),
-            where("status", "==", "published") // Fixed status to match NewEvent
+            where("status", "==", "published")
           )
         );
-        let list = snap.docs.map((doc) => {
-          const data = doc.data();
-          const eventDate = data.date instanceof Timestamp
-            ? data.date.toDate().toISOString().split('T')[0] // Convert to YYYY-MM-DD string
-            : typeof data.date === 'string' ? data.date : new Date().toISOString().split('T')[0];
-          return {
-            id: doc.id,
-            name: data.name,
-            date: eventDate,
-            location: data.venueAddress || data.onlineLink || "Online", // Compute location from actual fields
-            posterUrl: data.posterUrl,
-            attendees: data.attendees ?? 0,
-            slug: data.slug,
-          };
-        });
 
-        // Sort by date ascending in client
-        list = list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const list = snap.docs
+          .map((doc) => {
+            const data = doc.data();
+            const eventDate =
+              data.date instanceof Timestamp
+                ? data.date.toDate().toISOString().split("T")[0]
+                : typeof data.date === "string"
+                ? data.date
+                : new Date().toISOString().split("T")[0];
+
+            return {
+              id: doc.id,
+              name: data.name,
+              date: eventDate,
+              location:
+                data.venueAddress || data.onlineLink || "Online",
+              posterUrl: data.posterUrl,
+              attendees: data.attendees ?? 0,
+              slug: data.slug,
+            };
+          })
+          .sort(
+            (a, b) =>
+              new Date(a.date).getTime() -
+              new Date(b.date).getTime()
+          );
 
         setEvents(list);
       } catch (err) {
@@ -69,33 +77,36 @@ export default function Events() {
         setLoading(false);
       }
     };
+
     fetchEvents();
   }, []);
 
-  /* ================= LOADING ================= */
   if (loading) {
     return (
-      <section className="py-20 flex justify-center">
-        <div className="animate-spin h-10 w-10 border-b-2 border-red-600 rounded-full" />
+      <section className="py-24 flex justify-center">
+        <div className="h-10 w-10 animate-spin border-b-2 border-red-600 rounded-full" />
       </section>
     );
   }
 
-  /* ================= UI ================= */
   return (
-    <section className=" px-[5vw] py-[15vh]">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-gray-900">Upcoming Events</h1>
-        <p className="text-gray-500 mt-2">
-          Discover conferences, meetups, and experiences near you
+    <section className="px-[5vw] py-[12vh]">
+      {/* HEADER */}
+      <div className="mb-14 max-w-3xl">
+        <h1 className="text-4xl font-bold text-gray-900">
+          Upcoming Events
+        </h1>
+        <p className="text-gray-500 mt-3 text-lg">
+          Conferences, meetups & experiences you shouldn’t miss
         </p>
       </div>
+
       {events.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
+        <div className="text-center py-24 text-gray-500">
           No events available right now
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
           {events.map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
@@ -108,47 +119,59 @@ export default function Events() {
 /* ================= EVENT CARD ================= */
 function EventCard({ event }: { event: PublicEvent }) {
   const eventUrl = `/events/${event.slug ?? event.id}--${event.id}`;
+
   return (
     <Link
       href={eventUrl}
-      className="group bg-white rounded-xl border overflow-hidden hover:shadow-xl transition-all"
+      className="group rounded-2xl border bg-white overflow-hidden transition-all
+                 hover:-translate-y-1 hover:shadow-2xl"
     >
-      {/* Image */}
-      <div className="relative h-48 w-full bg-gray-100">
+      {/* POSTER */}
+      <div className="relative aspect-[16/10] bg-gray-100 overflow-hidden">
         <Image
           src={event.posterUrl || "/default-event-thumb.jpg"}
           alt={event.name}
-          fill
-          className="object-cover group-hover:scale-105 transition-transform"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          height={400}
+          width={300}
+          className="object-cover transition-transform duration-500 group-hover:scale-110 w-full h-full"
+          // sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
+
+        {/* GRADIENT */}
+        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/30 to-transparent" />
+
+        {/* DATE BADGE */}
+        <div className="absolute top-4 left-4 rounded-xl bg-white/95 px-3 py-1.5 text-xs font-semibold text-gray-900">
+          {new Date(event.date).toDateString()}
+        </div>
       </div>
-      {/* Content */}
-      <div className="p-5 space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+
+      {/* CONTENT */}
+      <div className="p-6 space-y-4">
+        <h3 className="text-xl font-semibold text-gray-900 line-clamp-2">
           {event.name}
         </h3>
-        <div className="text-sm text-gray-500 space-y-1">
+
+        <div className="space-y-2 text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            {new Date(event.date).toLocaleDateString()}
-          </div>
-          {event.location && (
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
+            <MapPin className="h-4 w-4 text-red-500" />
+            <span className="line-clamp-1">
               {event.location}
-            </div>
-          )}
+            </span>
+          </div>
+
           <div className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
+            <Users className="h-4 w-4 text-red-500" />
             {event.attendees} attending
           </div>
         </div>
+
+        {/* CTA */}
         <div className="pt-4 flex items-center justify-between">
-          <span className="text-red-600 text-sm font-medium">
+          <span className="text-red-600 font-medium text-sm">
             View details
           </span>
-          <ArrowRight className="h-4 w-4 text-red-600 group-hover:translate-x-1 transition-transform" />
+          <ArrowRight className="h-4 w-4 text-red-600 transition-transform group-hover:translate-x-1" />
         </div>
       </div>
     </Link>
