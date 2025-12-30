@@ -8,7 +8,7 @@ import { CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
 function StatusContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const orderId = searchParams.get("order_id");
+  const orderId = searchParams?.get("order_id");
 
   const [status, setStatus] = useState<"LOADING" | "SUCCESS" | "FAILED">("LOADING");
   const [message, setMessage] = useState("Verifying your payment...");
@@ -86,10 +86,10 @@ function StatusContent() {
             
             <div className="flex flex-col w-full gap-3">
                 <Link 
-                  href="/dashboard/tickets" 
+                  href="/dashboard/attendee/my-bookings" 
                   className="w-full bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 transition"
                 >
-                  View My Tickets
+                  View My Bookings
                 </Link>
                 <Link 
                   href="/" 
