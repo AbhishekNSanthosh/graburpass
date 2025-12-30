@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Calendar, Clock, MapPin, Share2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import PaymentButton from "../payment/PaymentButton";
 
 /* ================= TYPES ================= */
 
@@ -222,15 +223,11 @@ export default function EventDetails() {
             </div>
 
             {/* CTA */}
-            <Link
-              href="/contact"
-              className="group relative flex items-center justify-center gap-2 w-full bg-green-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-green-700 transition-all"
-            >
-              Book Now
-              <span className="group-hover:translate-x-1 transition-transform">
-                →
-              </span>
-            </Link>
+            <PaymentButton 
+              amount={event.price} 
+              eventId={eventId || ""}
+              eventName={event.name}
+            />
 
             {/* TRUST BADGES */}
             <div className="flex items-center justify-center gap-3 text-xs text-gray-500">
