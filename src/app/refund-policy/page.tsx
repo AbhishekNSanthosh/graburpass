@@ -52,7 +52,7 @@ export default function Page() {
 
           <h2 className="text-xl font-semibold">4. Refund Processing Time</h2>
           <p>
-            Approved refunds are processed via <strong>Razorpay</strong> and
+            Approved refunds are processed via <strong>Cashfree Payments</strong> and
             typically reflect in your bank account or original payment method
             within 5–7 business days, depending on your bank or payment provider.
           </p>
@@ -66,7 +66,7 @@ export default function Page() {
           <h2 className="text-xl font-semibold">6. Failed or Duplicate Payments</h2>
           <p>
             In case of failed transactions where the amount has been debited,
-            the money is usually auto-refunded by Razorpay within 5–7 business
+            the money is usually auto-refunded by Cashfree Payments within 5–7 business
             days. For duplicate payments, please contact our support team.
           </p>
 
@@ -85,7 +85,9 @@ export default function Page() {
             <br />
             Product: GrabUrPass
             <br />
-            Email: reach.abhisheksanthosh@gmail.com
+            Email: beondinnovations@gmail.com
+            <br />
+            Phone: +91 9946846101
             <br />
             Location: Kerala, India
           </p>

@@ -1,21 +1,63 @@
 @layer theme, base, components, utilities;
 
-
 @import "tailwindcss";
 
 /* ---------- Colors ---------- */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  /* Light Mode Defaults */
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Brand Colors */
+  --primary: #eb0028;
+  --primary-glow: rgba(235, 0, 40, 0.4);
+
+  /* Surface Colors */
+  --surface-1: #f4f4f5;
+  --surface-2: #e4e4e7;
+  --surface-glass: rgba(255, 255, 255, 0.7);
+
+  /* Nav Colors */
+  --nav-bg: rgba(255, 255, 255, 0.9);
+  --nav-border: rgba(0, 0, 0, 0.05);
+
+  /* Text Muted */
+  --text-muted: #52525b;
+}
+
+.dark {
+  /* Dark Mode Overrides */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Nav Colors */
+  --nav-bg: rgba(10, 10, 10, 0.7);
+  --nav-border: rgba(255, 255, 255, 0.05);
+
+  /* Surface Colors */
+  --surface-1: #171717;
+  --surface-2: #262626;
+  --surface-glass: rgba(23, 23, 23, 0.7);
+
+  /* Text Muted */
+  --text-muted: #a1a1aa;
 }
 
 /* ---------- Tailwind Theme Variables ---------- */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-text-muted: var(--text-muted);
+
   --font-sans: var(--font-dm-sans);
-  /* updated to DM Sans */
   --font-mono: monospace;
+
+  /* Red Scale (Preserved & Adjusted) */
   --color-red-50: #fff0f3;
   --color-red-100: #ffdde3;
   --color-red-200: #ffc1cc;
@@ -24,20 +66,163 @@
   --color-red-500: #ff264b;
   --color-red-600: #fc0630;
   --color-red-700: #eb0028;
-  /* red */
   --color-red-800: #af0522;
   --color-red-900: #900c22;
   --color-red-950: #50000e;
-
-  /* Optional: set a main primary color */
-  --color-primary: var(--color-red-700);
 }
 
 /* ---------- Body Styles ---------- */
 body {
-  background: #ffffff;
-  /* background: #FAF9F6; */
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
-  /* DM Sans applied */
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Utility Classes ---------- */
+.text-gradient {
+  background: linear-gradient(135deg, #171717 0%, #52525b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dark .text-gradient {
+  background: linear-gradient(135deg, #fff 0%, #a5a5a5 100%);
+}
+
+.text-gradient-primary {
+  background: linear-gradient(135deg, #eb0028 0%, #ff5975 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.glass-nav {
+  background: var(--nav-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--nav-border);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ---------- Animations ---------- */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0% {
+    box-shadow: 0 0 5px var(--primary-glow);
+  }
+
+  50% {
+    box-shadow: 0 0 20px var(--primary-glow);
+  }
+
+  100% {
+    box-shadow: 0 0 5px var(--primary-glow);
+  }
+}
+
+.animate-glow {
+  animation: glow 3s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
+@keyframes float-slow {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite linear;
+}
+
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 10s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
 }

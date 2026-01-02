@@ -1,80 +1,121 @@
 import React from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Facebook, Twitter, Instagram, Linkedin, Mail, ArrowRight, Heart, Zap } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-white">
-      <div className=" px-[5vw] py-12 lg:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
-
-          {/* Logo & Description */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-3 mb-4">
-              <h3 className="text-2xl font-bold text-red-500">Graburpass</h3>
-            </div>
-            <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              GraburPass is a digital ticketing and event management platform
-              operated by <strong>Beond Innovations</strong>.
-            </p>
-            <p className="text-gray-500 text-xs leading-relaxed mb-6">
-              We provide technology solutions for event organizers including
-              online ticket sales, QR-based check-ins, and analytics.
-            </p>
-
-            <div className="flex space-x-4">
-              {/* Social icons unchanged */}
-            </div>
+    <footer className="bg-surface-1 border-t border-black/5 z-10 relative overflow-hidden">
+      
+      <div className="w-full px-[5vw] py-10">
+        
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12  mb-16">
+          
+          {/* Brand & Newsletter */}
+          <div className="lg:col-span-4 space-y-8 pr-12">
+             <div>
+                <Link href="/" className="relative h-10 w-40 block transition-opacity hover:opacity-80 mb-6">
+                   <Image 
+                     src="/mainlogo.svg" 
+                     alt="Graburpass" 
+                     fill
+                     className="object-contain object-left"
+                   />
+                </Link>
+                <p className="text-muted text-sm leading-relaxed max-w-sm">
+                   We're building the future of event ticketing. Beautiful, powerful, and simpler than ever before.
+                </p>
+                <p className="text-[10px] text-muted/60 font-medium tracking-widest uppercase mt-4">
+                   A product from Beond Innovations
+                </p>
+             </div>
+             
+             <div className="flex gap-4">
+               <SocialLink href="#" icon={<Twitter className="w-4 h-4" />} />
+               <SocialLink href="#" icon={<Instagram className="w-4 h-4" />} />
+               <SocialLink href="#" icon={<Linkedin className="w-4 h-4" />} />
+               <SocialLink href="mailto:hello@graburpass.com" icon={<Mail className="w-4 h-4" />} />
+             </div>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h4 className="text-sm font-semibold text-red-500 uppercase tracking-wide mb-4">
-              Quick Links
-            </h4>
-            <ul className="space-y-2">
-              <li><a href="/" className="text-gray-400 hover:text-red-500 text-sm">Home</a></li>
-              <li><a href="/events" className="text-gray-400 hover:text-red-500 text-sm">Events</a></li>
-              <li><a href="/dashboard" className="text-gray-400 hover:text-red-500 text-sm">Dashboard</a></li>
-              <li><a href="/support" className="text-gray-400 hover:text-red-500 text-sm">Support</a></li>
-            </ul>
-          </div>
-
-          {/* Company */}
-          <div>
-            <h4 className="text-sm font-semibold text-red-500 uppercase tracking-wide mb-4">
-              Company
-            </h4>
-            <ul className="space-y-2">
-              {/* <li><a href="/about" className="text-gray-400 hover:text-red-500 text-sm">About Us</a></li> */}
-              <li><a href="/contact" className="text-gray-400 hover:text-red-500 text-sm">Contact</a></li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h4 className="text-sm font-semibold text-red-500 uppercase tracking-wide mb-4">
-              Legal
-            </h4>
-            <ul className="space-y-2">
-              <li><a href="/privacy-policy" className="text-gray-400 hover:text-red-500 text-sm">Privacy Policy</a></li>
-              <li><a href="/terms-and-conditions" className="text-gray-400 hover:text-red-500 text-sm">Terms & Conditions</a></li>
-              <li><a href="/refund-policy" className="text-gray-400 hover:text-red-500 text-sm">Refund & Cancellation Policy</a></li>
-            </ul>
+          {/* Links Grid */}
+          <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-8">
+             <FooterColumn 
+                title="Product" 
+                links={[
+                  { label: "Features", href: "/#features" },
+                  { label: "Pricing", href: "/#pricing" },
+                  { label: "Changelog", href: "/changelog" },
+                  { label: "Docs", href: "/docs" },
+                ]}
+             />
+             <FooterColumn 
+                title="Company" 
+                links={[
+                  { label: "About", href: "/about" },
+                  { label: "Careers", href: "/careers" },
+                  { label: "Blog", href: "/blog" },
+                  { label: "Contact", href: "/contact" },
+                ]}
+             />
+             <FooterColumn 
+                title="Resources" 
+                links={[
+                   { label: "Community", href: "/community" },
+                   { label: "Help Center", href: "/help" },
+                   { label: "Partners", href: "/partners" },
+                   { label: "Media Kit", href: "/media-kit" },
+                ]}
+             />
+             <FooterColumn 
+                title="Legal" 
+                links={[
+                   { label: "Privacy", href: "/privacy-policy" },
+                   { label: "Terms", href: "/terms-and-conditions" },
+                   { label: "Refunds", href: "/refund-policy" },
+                   { label: "Cookies", href: "/cookie-policy" },
+                ]}
+             />
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-gray-800 mt-12 pt-6 text-center text-xs text-gray-400 space-y-2">
-          <p>
-            © 2025 GraburPass. All rights reserved.
-          </p>
-          <p>
-            Operated by <strong>Beond Innovations</strong> · MSME (UDYAM-KL-01-0060286)
-          </p>
-          <p>
-            78, Nalpathil Chira, Payattupakka, Veliyanadu, Alappuzha, Kerala – 686534
-          </p>
+        <div className="pt-8 border-t border-black/5 flex flex-col md:flex-row justify-between items-center gap-4">
+           <div className="text-sm text-muted/60">
+              <p>© 2026 Beond Innovations. All rights reserved.</p>
+           </div>
+           
+           <div className="flex items-center gap-2 text-sm text-muted/60">
+               <Zap className="w-3.5 h-3.5 text-primary" />
+               <span>Powered by Beond Innovations</span>
+           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterColumn({ title, links }: { title: string, links: {label: string, href: string}[] }) {
+  return (
+    <div>
+      <h4 className="font-semibold text-foreground mb-6 text-sm uppercase tracking-wider opacity-80">{title}</h4>
+      <ul className="space-y-3">
+        {links.map((link, i) => (
+          <li key={i}>
+            <Link href={link.href} className="text-muted hover:text-primary transition-colors text-sm font-medium">
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SocialLink({ href, icon }: { href: string, icon: React.ReactNode }) {
+  return (
+    <a href={href} className="w-10 h-10 rounded-full bg-white dark:bg-white/5 border border-black/5 flex items-center justify-center text-muted hover:border-primary/50 hover:text-primary transition-all">
+      {icon}
+    </a>
   );
 }

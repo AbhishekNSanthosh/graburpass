@@ -34,14 +34,14 @@ export default function Page() {
           <ul className="list-disc pl-6 space-y-2">
             <li>Name, email address, and phone number</li>
             <li>Event booking and ticket details</li>
-            <li>Payment-related information processed securely via Razorpay</li>
+            <li>Payment-related information processed securely via Cashfree Payments</li>
             <li>Device, browser, and usage analytics</li>
           </ul>
 
           <h2 className="text-xl font-semibold">2. Payments</h2>
           <p>
             All payments are securely processed through{" "}
-            <strong>Razorpay</strong>. We do not store or process your card
+            <strong>Cashfree Payments</strong>. We do not store or process your card
             details, UPI IDs, or net banking credentials on our servers.
           </p>
 
@@ -59,7 +59,7 @@ export default function Page() {
           <h2 className="text-xl font-semibold">4. Data Sharing</h2>
           <p>
             We do not sell or rent your personal information. Data may be shared
-            only with payment partners (Razorpay), event organizers, or legal
+            only with payment partners (Cashfree Payments), event organizers, or legal
             authorities when required by law.
           </p>
 
@@ -77,7 +77,7 @@ export default function Page() {
 
           <h2 className="text-xl font-semibold">7. Refunds & Cancellations</h2>
           <p>
-            Refunds are subject to the event organizer’s policy and Razorpay’s
+            Refunds are subject to the event organizer’s policy and Cashfree Payments'
             processing timelines.
           </p>
 
@@ -99,7 +99,9 @@ export default function Page() {
             <br />
             Product: GrabUrPass
             <br />
-            Email: reach.abhisheksanthosh@gmail.com
+            Email: beondinnovations@gmail.com
+            <br />
+            Phone: +91 9946846101
             <br />
             Location: Kerala, India
           </p>

@@ -43,7 +43,6 @@ interface Event {
 
 /* ================= HELPERS ================= */
 
-
 function slugify(text: string) {
   return text
     .toLowerCase()
@@ -140,35 +139,32 @@ export default function ManageEvents() {
   /* ================= SHARE HANDLER ================= */
 
   const handleShare = async (event: Event) => {
-  const slug = event.slug || slugify(event.name);
-  const shareUrl = `${SITE_URL}/events/${slug}--${event.id}`;
+    const slug = event.slug || slugify(event.name);
+    const shareUrl = `${SITE_URL}/events/${slug}--${event.id}`;
+    const path = `${slug}--${event.id}`;
+    const sharePromise = async () => {
+      // Save only once
+      if (!event.slug || !event.shareUrl) {
+        await updateDoc(doc(db, "published_events", event.id), {
+          slug: path,
+          shareUrl,
+        });
 
-  const sharePromise = async () => {
-    // Save only once
-    if (!event.slug || !event.shareUrl) {
-      await updateDoc(doc(db, "published_events", event.id), {
-        slug,
-        shareUrl,
-      });
+        setPublishedEvents((prev) =>
+          prev.map((e) => (e.id === event.id ? { ...e, slug, shareUrl } : e))
+        );
+      }
 
-      setPublishedEvents((prev) =>
-        prev.map((e) =>
-          e.id === event.id ? { ...e, slug, shareUrl } : e
-        )
-      );
-    }
+      await navigator.clipboard.writeText(shareUrl);
+      return shareUrl;
+    };
 
-    await navigator.clipboard.writeText(shareUrl);
-    return shareUrl;
+    toast.promise(sharePromise(), {
+      loading: "Generating share link...",
+      success: "Event link copied!",
+      error: "Failed to generate share link",
+    });
   };
-
-  toast.promise(sharePromise(), {
-    loading: "Generating share link...",
-    success: "Event link copied!",
-    error: "Failed to generate share link",
-  });
-};
-
 
   /* ================= FILTERING ================= */
 

@@ -68,7 +68,7 @@ export default function Page() {
           <h2 className="text-xl font-semibold">5. Payments</h2>
           <p>
             All payments are processed securely through{" "}
-            <strong>Razorpay</strong>. GrabUrPass does not store your card or
+            <strong>Cashfree Payments</strong>. GrabUrPass does not store your card or
             banking details. Transaction success depends on the payment gateway
             and your bank.
           </p>
@@ -118,7 +118,9 @@ export default function Page() {
             <br />
             Product: GrabUrPass
             <br />
-            Email: reach.abhisheksanthosh@gmail.com
+            Email: beondinnovations@gmail.com
+            <br />
+            Phone: +91 9946846101
             <br />
             Location: Kerala, India
           </p>

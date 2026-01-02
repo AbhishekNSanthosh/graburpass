@@ -78,15 +78,26 @@ export const metadata: Metadata = {
   },
 };
 
+import { ThemeProvider } from "./providers";
+
+// ... imports
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${DMSans.variable} antialiased`}>
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          forcedTheme="light"
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
         <Toaster position="bottom-center" />
       </body>
     </html>
