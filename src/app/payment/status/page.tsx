@@ -68,7 +68,7 @@ function StatusContent() {
         
         {status === "LOADING" && (
           <div className="flex flex-col items-center py-10">
-            <Loader2 className="h-16 w-16 text-green-600 animate-spin mb-6" />
+            <Loader2 className="h-16 w-16 text-red-600 animate-spin mb-6" />
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Processing Payment</h2>
             <p className="text-gray-500">{message}</p>
           </div>
@@ -87,7 +87,7 @@ function StatusContent() {
             <div className="flex flex-col w-full gap-3">
                 <Link 
                   href="/dashboard/attendee/my-bookings" 
-                  className="w-full bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 transition"
+                  className="w-full bg-red-600 text-white font-semibold py-3 rounded-xl hover:bg-red-700 transition"
                 >
                   View My Bookings
                 </Link>
