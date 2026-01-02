@@ -57,10 +57,34 @@ const PaymentButton = ({ amount, eventId, eventName }: PaymentButtonProps) => {
       if (data.payment_session_id) {
         const checkoutOptions = {
           paymentSessionId: data.payment_session_id,
-          redirectTarget: "_self" as const, 
+          redirectTarget: "_modal" as const,
+          appearance: {
+            theme: {
+              color: "#fc0630",
+            },
+          },
         };
-        
-        cashfree.checkout(checkoutOptions);
+
+        cashfree.checkout(checkoutOptions).then((result: any) => {
+            if(result.error){
+                // User dropped or failed
+                console.log("User dropped payment or error occured", result.error);
+                toast.error("Payment Cancelled");
+            } else if(result.redirect){
+                // SDK says it's redirecting, but user says it fails.
+                // We will manually force a redirect to our status page just in case.
+                console.log("Payment initiated, redirecting to status...");
+                router.push(`/payment/status?order_id=${data.order_id}`);
+            } else if(result.paymentDetails) {
+                 // Success without redirect flag? Redirect anyway.
+                 console.log("Payment complete, redirecting...", result.paymentDetails);
+                 router.push(`/payment/status?order_id=${data.order_id}`);
+            } else {
+                 // Fallback catch-all: if promises resolves without error, assume something happened that warrants a check.
+                  console.log("Checkout finished, checking status...");
+                  router.push(`/payment/status?order_id=${data.order_id}`);
+            }
+        });
       } else {
         console.error("Payment Session creation failed:", data);
         toast.error(data.error || "Failed to initiate payment");
@@ -83,7 +107,7 @@ const PaymentButton = ({ amount, eventId, eventName }: PaymentButtonProps) => {
         <button
         onClick={handlePayment}
         disabled={loading}
-        className="group relative flex items-center justify-center gap-2 w-full bg-green-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+        className="group relative flex items-center justify-center gap-2 w-full bg-red-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
         >
         {loading ? (
             <span className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />

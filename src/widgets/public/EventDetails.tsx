@@ -8,6 +8,7 @@ import { Calendar, Clock, MapPin, Share2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import PaymentButton from "../payment/PaymentButton";
+import { calculatePaymentBreakdown } from "@/utils/paymentUtils";
 
 /* ================= TYPES ================= */
 
@@ -118,7 +119,7 @@ export default function EventDetails() {
   if (loading) {
     return (
       <div className="py-24 flex justify-center">
-        <div className="h-10 w-10 animate-spin border-b-2 border-green-600 rounded-full" />
+        <div className="h-10 w-10 animate-spin border-b-2 border-red-600 rounded-full" />
       </div>
     );
   }
@@ -128,6 +129,8 @@ export default function EventDetails() {
   }
 
   /* ================= UI ================= */
+
+  const { platformFee, gatewayFee, totalAmount } = calculatePaymentBreakdown(event.price);
 
   return (
     <main className="max-w-7xl mx-auto px-6 py-10">
@@ -211,15 +214,41 @@ export default function EventDetails() {
         <aside className="space-y-6">
           {/* BOOKING CARD */}
           <div className="sticky top-24 rounded-3xl border bg-white p-6 shadow-xl space-y-6">
-            {/* PRICE */}
+            {/* PRICE BREAKDOWN */}
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Starting from
+              <p className="text-xs uppercase tracking-wide text-gray-500 mb-4">
+                Price Details
               </p>
-              <p className="mt-1 text-4xl font-extrabold text-green-600">
-                {event.price > 0 ? `₹${event.price}` : "Free"}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">per person</p>
+              
+              <div className="space-y-3 mb-4">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Base Ticket</span>
+                  <span className="font-medium">₹{event.price}</span>
+                </div>
+                {event.price > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Platform Fee (2%)</span>
+                      <span>+ ₹{platformFee}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Gateway Fee (2%)</span>
+                      <span>+ ₹{gatewayFee}</span>
+                    </div>
+                    <div className="h-px bg-gray-100 my-2" />
+                    <div className="flex justify-between text-base font-bold text-gray-900">
+                      <span>Total Payable</span>
+                      <span>₹{totalAmount}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {event.price === 0 && (
+                <p className="mt-1 text-4xl font-extrabold text-green-600">
+                  Free
+                </p>
+              )}
             </div>
 
             {/* CTA */}
@@ -235,13 +264,6 @@ export default function EventDetails() {
               <span>•</span>
               <span>⚡ Instant confirmation</span>
             </div>
-
-            {/* OPTIONAL INFO */}
-            {event.price > 0 && (
-              <p className="text-xs text-gray-400 text-center">
-              Platform fees may apply
-              </p>
-            )}
           </div>
 
           {/* ORGANIZER */}

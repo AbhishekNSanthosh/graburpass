@@ -20,9 +20,25 @@ export async function GET(req: Request) {
 
     const orderData = orderSnap.data();
 
+    // Helper to return consistent response with event details
+    const returnWithEventDetails = (status: string, message?: string, extra?: any) => {
+      return NextResponse.json({
+        status,
+        message,
+        order: {
+          ...orderData,
+          // Ensure these are explicitly available at top level if needed, 
+          // though they are in orderData already.
+          eventId: orderData.eventId,
+          eventName: orderData.eventName
+        },
+        ...extra
+      });
+    };
+
     // If already SUCCESS or FAILED, return immediately
     if (orderData.status === "SUCCESS" || orderData.status === "FAILED") {
-       return NextResponse.json({ status: orderData.status, order: orderData });
+      return returnWithEventDetails(orderData.status);
     }
 
     // If PENDING, check with Cashfree
@@ -49,7 +65,7 @@ export async function GET(req: Request) {
         // But logging the error is important
         const errorData = await response.json();
         console.error("Cashfree Verification Failed:", errorData);
-        return NextResponse.json({ status: orderData.status, message: "Verification failed, try again" });
+      return returnWithEventDetails(orderData.status, "Verification failed, try again");
     }
 
     const payments = await response.json();
@@ -65,21 +81,22 @@ export async function GET(req: Request) {
             paidAt: new Date().toISOString(),
             verifiedByApi: true
         });
-        return NextResponse.json({ status: "SUCCESS" });
+      return returnWithEventDetails("SUCCESS");
     } 
     
-    // Check for failure
-    const failedPayment = payments.find((p: any) => p.payment_status === "FAILED");
+    // Check for failure or user drop
+    const failedPayment = payments.find((p: any) => p.payment_status === "FAILED" || p.payment_status === "USER_DROPPED");
     if (failedPayment) {
+      const reason = failedPayment.payment_message || (failedPayment.payment_status === "USER_DROPPED" ? "Transaction Cancelled by User" : "Payment Failed");
          await updateDoc(orderRef, {
             status: "FAILED",
-            failureReason: failedPayment.payment_message || "Payment Failed",
+           failureReason: reason,
             updatedAt: new Date().toISOString()
         });
-        return NextResponse.json({ status: "FAILED" });
+      return returnWithEventDetails("FAILED", reason);
     }
 
-    return NextResponse.json({ status: "PENDING" });
+    return returnWithEventDetails("PENDING");
 
   } catch (error) {
     console.error("Verification Error:", error);
