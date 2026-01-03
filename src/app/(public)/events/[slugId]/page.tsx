@@ -41,6 +41,10 @@ export default function PublicEventPage() {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [bgStyle, setBgStyle] = useState("");
+  const [selectedTicketIndex, setSelectedTicketIndex] = useState<number | null>(
+    null
+  );
+  const [highlightTickets, setHighlightTickets] = useState(false);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
 
@@ -274,11 +278,14 @@ export default function PublicEventPage() {
                       : "Free"}
                   </p>
                   <button
-                    onClick={() =>
-                      document
-                        .getElementById("tickets")
-                        ?.scrollIntoView({ behavior: "smooth" })
-                    }
+                    onClick={() => {
+                      const ticketSection = document.getElementById("tickets");
+                      if (ticketSection) {
+                        ticketSection.scrollIntoView({ behavior: "smooth" });
+                        setHighlightTickets(true);
+                        setTimeout(() => setHighlightTickets(false), 2000);
+                      }
+                    }}
                     className="w-full bg-red-600 text-white px-6 py-3.5 rounded-xl font-bold text-base hover:bg-red-700 transition-all shadow-lg hover:shadow-red-600/30 flex items-center justify-center transform active:scale-[0.98] group"
                   >
                     <Ticket className="h-5 w-5 mr-2 group-hover:-rotate-12 transition-transform" />
@@ -340,7 +347,13 @@ export default function PublicEventPage() {
             {/* Right Column: Ticket Selection */}
             <div className="lg:col-span-1" id="tickets">
               <div className="sticky top-28 space-y-6">
-                <div className="bg-white rounded-[10px] p-6 border border-gray-100">
+                <div
+                  className={`bg-white rounded-[10px] p-6 border transition-all duration-500 ${
+                    highlightTickets
+                      ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)] scale-[1.02]"
+                      : "border-gray-100"
+                  }`}
+                >
                   <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
                     <span>Select Tickets</span>
                     <Ticket className="h-6 w-6 text-red-600" />
@@ -350,13 +363,30 @@ export default function PublicEventPage() {
                     {event.ticketTypes?.map((ticket: any, idx: number) => (
                       <div
                         key={idx}
-                        className="p-4 border border-gray-200 hover:border-red-500 hover:bg-red-50/50 rounded-2xl transition-all cursor-pointer group"
+                        onClick={() => setSelectedTicketIndex(idx)}
+                        className={`p-4 border rounded-2xl transition-all cursor-pointer group ${
+                          selectedTicketIndex === idx
+                            ? "border-red-600 bg-red-50 shadow-sm"
+                            : "border-gray-200 hover:border-red-500 hover:bg-red-50/50"
+                        }`}
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-bold text-gray-900 group-hover:text-red-700">
+                          <span
+                            className={`font-bold group-hover:text-red-700 ${
+                              selectedTicketIndex === idx
+                                ? "text-red-700"
+                                : "text-gray-900"
+                            }`}
+                          >
                             {ticket.name}
                           </span>
-                          <span className="font-bold text-lg text-red-600 bg-red-50 px-3 py-1 rounded-full">
+                          <span
+                            className={`font-bold text-lg px-3 py-1 rounded-full ${
+                              selectedTicketIndex === idx
+                                ? "bg-red-100 text-red-700"
+                                : "bg-red-50 text-red-600"
+                            }`}
+                          >
                             {ticket.price ? `₹${ticket.price}` : "Free"}
                           </span>
                         </div>
@@ -365,9 +395,33 @@ export default function PublicEventPage() {
                             <CheckCircle2 className="h-3 w-3 mr-1 text-green-500" />
                             {ticket.quantity > 0 ? "Available" : "Sold Out"}
                           </span>
+                          {selectedTicketIndex === idx && (
+                            <CheckCircle2 className="h-4 w-4 text-red-600" />
+                          )}
                         </div>
                       </div>
                     ))}
+
+                    <button
+                      onClick={() => {
+                        if (selectedTicketIndex !== null) {
+                          router.push(
+                            `/events/book/${slugId}?ticketIdx=${selectedTicketIndex}`
+                          );
+                        } else {
+                          toast.error("Please select a ticket first");
+                        }
+                      }}
+                      disabled={selectedTicketIndex === null}
+                      className={`w-full py-4 rounded-xl font-bold text-base flex items-center justify-center transition-all ${
+                        selectedTicketIndex !== null
+                          ? "bg-red-600 text-white shadow-xl hover:bg-red-700 transform active:scale-[0.98]"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      }`}
+                    >
+                      Process to Book{" "}
+                      <ArrowLeft className="w-5 h-5 ml-2 rotate-180" />
+                    </button>
                   </div>
                 </div>
 
