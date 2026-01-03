@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from 'uuid';
 import { db } from "@/utils/configs/firebaseConfig";
 import { doc, setDoc } from "firebase/firestore";
-import { calculatePaymentBreakdown } from "@/utils/paymentUtils";
 
 export async function POST(req: Request) {
     try {
@@ -37,11 +36,11 @@ export async function POST(req: Request) {
 
         // Calculate Fees (Server-side validation)
         // Calculate Fees (Server-side validation)
-        const { totalAmount, platformFee, gatewayFee } = calculatePaymentBreakdown(amount);
+        // const { totalAmount, platformFee, gatewayFee } = calculatePaymentBreakdown(amount);
 
         // Cashfree payload uses TOTAL amount
         const payload = {
-            order_amount: totalAmount,
+            order_amount: amount,
             order_currency: "INR",
             order_id: orderId,
             customer_details: {
@@ -59,10 +58,8 @@ export async function POST(req: Request) {
         try {
             await setDoc(doc(db, "orders", orderId), {
                 orderId,
-                amount: totalAmount, // Stores the final amount the user pays
+                amount: amount, // Stores the final amount the user pays
                 baseAmount: amount,  // Stores the original ticket price
-                platformFee,
-                gatewayFee,
                 currency: "INR",
                 status: "PENDING",
                 customerId: customerId || "guest",
