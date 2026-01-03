@@ -16,6 +16,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import PaymentButton from "../payment/PaymentButton";
+import { calculatePaymentBreakdown } from "@/utils/paymentUtils";
 
 // TYPES
 interface RegistrationField {
@@ -161,7 +162,7 @@ export default function EventBookingWrapper() {
         {/* Header Skeleton */}
         <div className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-black/5 h-16" />
 
-        <main className="pt-24 pb-32 px-6 max-w-xl mx-auto space-y-12">
+        <main className="pt-24 pb-32 px-6 max-w-2xl mx-auto space-y-8">
           {/* Summary Skeleton */}
           <div className="flex gap-6 items-start">
             <div className="w-24 h-32 bg-gray-200 dark:bg-gray-800 rounded-xl" />
@@ -203,7 +204,7 @@ export default function EventBookingWrapper() {
 
         {/* Footer Skeleton */}
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-black/5">
-          <div className="max-w-xl mx-auto flex items-center justify-between">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div className="h-8 w-24 bg-gray-200 dark:bg-gray-800 rounded" />
             <div className="h-12 w-32 bg-gray-200 dark:bg-gray-800 rounded-xl" />
           </div>
@@ -216,11 +217,22 @@ export default function EventBookingWrapper() {
 
   const dateObj = new Date(event.date);
 
+  // Calculate Breakdown
+  const paymentBreakdown = calculatePaymentBreakdown(totalPrice);
+  const finalAmount = paymentBreakdown.totalAmount;
+
+  // Validate Form
+  const isFormValid = event.registrationFields.every((field) => {
+    if (!field.required) return true;
+    const val = formData[field.id];
+    return val && val.toString().trim() !== "";
+  });
+
   return (
     <div className="min-h-screen bg-background relative selection:bg-primary/10">
       {/* Navbar / Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-black/5">
-        <div className="max-w-2xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-6 sm:px-0 h-16 flex items-center justify-between">
           <Link
             href={`/events/${slugId}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
@@ -236,7 +248,7 @@ export default function EventBookingWrapper() {
       </div>
 
       <main className="pt-24 pb-32 px-6">
-        <div className="max-w-xl mx-auto space-y-12">
+        <div className="max-w-2xl mx-auto space-y-8">
           {/* Minimal Event Summary */}
           <div className="flex gap-6 items-start animate-fade-in-up">
             <div className="w-24 h-32 relative rounded-xl overflow-hidden border border-black/10 shrink-0 bg-surface-2 shadow-sm">
@@ -334,6 +346,28 @@ export default function EventBookingWrapper() {
                   </button>
                 </div>
               </div>
+
+              {/* Payment Breakdown */}
+              {totalPrice > 0 && (
+                <div className="bg-surface-1/50 rounded-xl p-4 space-y-2 border border-black/5 text-sm mt-2 animate-fade-in-up">
+                  <div className="flex justify-between text-muted">
+                    <span>Base Price</span>
+                    <span>₹{paymentBreakdown.baseAmount}</span>
+                  </div>
+                  <div className="flex justify-between text-muted">
+                    <span>Platform Fee (2%)</span>
+                    <span>₹{paymentBreakdown.platformFee}</span>
+                  </div>
+                  <div className="flex justify-between text-muted">
+                    <span>Gateway Fee (2%)</span>
+                    <span>₹{paymentBreakdown.gatewayFee}</span>
+                  </div>
+                  <div className="border-t border-black/5 pt-2 flex justify-between font-bold text-foreground">
+                    <span>Total Amount</span>
+                    <span>₹{paymentBreakdown.totalAmount}</span>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -407,24 +441,33 @@ export default function EventBookingWrapper() {
 
       {/* Checkout Bar (Floating Bottom) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-black/5 p-4 z-50 safe-pb shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-        <div className="max-w-md mx-auto flex items-center gap-4">
+        <div className="max-w-2xl mx-auto flex items-center gap-4">
           <div className="flex-1">
             <p className="text-xs font-bold text-muted uppercase">Total</p>
-            <p className="text-2xl font-black text-foreground leading-none">
-              {totalPrice > 0 ? `₹${totalPrice}` : "Free"}
-            </p>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-black text-foreground leading-none">
+                {finalAmount > 0 ? `₹${finalAmount}` : "Free"}
+              </p>
+              {finalAmount > totalPrice && finalAmount > 0 && (
+                <p className="text-xs font-medium text-muted">
+                  (Includes fees)
+                </p>
+              )}
+            </div>
           </div>
           <div className="w-40 sm:w-64">
             <PaymentButton
-              amount={totalPrice}
+              amount={finalAmount}
               eventId={eventId || ""}
               eventName={event.name}
               bookingData={{
                 registrationData: formData,
                 ticketType: event.ticketTypes?.[selectedTicketIndex],
                 ticketQuantity: ticketQuantity,
+                paymentBreakdown, // Pass breakdown for backend/logging if needed
               }}
               guestMode={true}
+              disabled={!isFormValid}
             />
           </div>
         </div>

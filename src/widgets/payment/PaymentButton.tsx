@@ -13,6 +13,7 @@ interface PaymentButtonProps {
   eventName: string;
   bookingData?: any;
   guestMode?: boolean;
+  disabled?: boolean;
 }
 
 const PaymentButton = ({
@@ -21,6 +22,7 @@ const PaymentButton = ({
   eventName,
   bookingData,
   guestMode = false,
+  disabled = false,
 }: PaymentButtonProps) => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -82,7 +84,7 @@ const PaymentButton = ({
         customerPhone =
           findVal(["phone", "mobile", "cell", "contact"]) || customerPhone;
       }
-
+      console.log(amount);
       const res = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -155,7 +157,7 @@ const PaymentButton = ({
       )}
       <button
         onClick={handlePayment}
-        disabled={loading}
+        disabled={loading || disabled}
         className="group relative flex items-center justify-center gap-2 w-full bg-red-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
       >
         {loading ? (
