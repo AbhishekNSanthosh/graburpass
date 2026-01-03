@@ -16,22 +16,42 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Copy,
 } from "lucide-react";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
+  getDoc,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { db, storage } from "@/utils/configs/firebaseConfig";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import toast from "react-hot-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getAuth } from "firebase/auth";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import "react-datepicker/dist/react-datepicker.css";
+import {
+  pdf,
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Image as PdfImage,
+} from "@react-pdf/renderer";
+import { SITE_URL } from "@/utils/constants/constansts";
+
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
 
 interface TicketType {
   name: string;
@@ -74,12 +94,20 @@ interface EventFormData {
   organizerName: string;
   organizerDescription: string;
   termsAccepted: boolean;
+  redirectUrl?: string;
 }
 
-export default function NewEvent() {
+interface NewEventProps {
+  editId?: string;
+}
+
+export default function NewEvent({ editId }: NewEventProps) {
   const [step, setStep] = useState(1);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
 
   const [formData, setFormData] = useState<EventFormData>({
     name: "",
@@ -105,6 +133,7 @@ export default function NewEvent() {
     organizerName: "",
     organizerDescription: "",
     termsAccepted: false,
+    redirectUrl: "",
   });
 
   const auth = getAuth();
@@ -144,6 +173,99 @@ export default function NewEvent() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [formData.venueAddress]);
+
+  const searchParams = useSearchParams();
+  const draftIdParam = searchParams?.get("draftId");
+
+  useEffect(() => {
+    if (draftIdParam) {
+      setLoading(true);
+      const fetchDraft = async () => {
+        try {
+          const docRef = doc(db, "event_drafts", draftIdParam);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            console.log("Fetched Draft Data:", data);
+
+            const fetchedPoster =
+              data.posterUrl || data.poster || data.url || null;
+
+            setFormData((prev) => ({
+              ...prev,
+              ...(data as EventFormData),
+              posterPreview: fetchedPoster,
+              ticketTypes: data.ticketTypes || prev.ticketTypes,
+              registrationFields:
+                data.registrationFields || prev.registrationFields,
+            }));
+
+            // Auto-detect orientation if missing
+            if (fetchedPoster && !data.mediaOrientation) {
+              const img = new window.Image();
+              img.onload = () => {
+                const orientation =
+                  img.width >= img.height ? "banner" : "poster";
+                updateFormData({ mediaOrientation: orientation });
+              };
+              img.src = fetchedPoster;
+            }
+
+            setDraftId(draftIdParam);
+          } else {
+            toast.error("Draft not found");
+          }
+        } catch (error) {
+          console.error("Error fetching draft:", error);
+          toast.error("Failed to load draft");
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchDraft();
+    }
+  }, [draftIdParam]);
+
+  // FETCH PUBLISHED EVENT FOR EDITING
+  useEffect(() => {
+    if (editId) {
+      setLoading(true);
+      const fetchPublishedEvent = async () => {
+        try {
+          const docRef = doc(db, "published_events", editId);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            console.log("Fetched Published Event Data:", data);
+
+            const fetchedPoster =
+              data.posterUrl || data.poster || data.url || null;
+
+            setFormData((prev) => ({
+              ...prev,
+              ...(data as EventFormData),
+              posterPreview: fetchedPoster,
+              ticketTypes: data.ticketTypes || prev.ticketTypes,
+              registrationFields:
+                data.registrationFields || prev.registrationFields,
+            }));
+
+            setPublishedId(editId);
+          } else {
+            toast.error("Event not found");
+          }
+        } catch (error) {
+          console.error("Error fetching event:", error);
+          toast.error("Failed to load event");
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchPublishedEvent();
+    }
+  }, [editId]);
 
   const router = useRouter();
   const categories = [
@@ -260,6 +382,46 @@ export default function NewEvent() {
       if (draftId) {
         // 🔁 Update existing draft
         docRef = doc(db, "event_drafts", draftId);
+        // Calculate detailed ticket stats
+        const processedTicketTypes = formData.ticketTypes.map((t) => {
+          const price = Number(t.price) || 0;
+          const feePercentage = formData.platformFeePercentage || 2;
+          let platformFee = 0;
+          let gatewayFee = 0;
+          let settlementAmount = 0;
+          let finalPrice = 0;
+
+          if (formData.isPaid && price > 0) {
+            platformFee =
+              Math.round(((price * feePercentage) / 100) * 100) / 100;
+
+            if (formData.platformFeePayer === "organizer") {
+              gatewayFee = Number((price * 0.02).toFixed(2));
+              finalPrice = price;
+              settlementAmount = Number(
+                (price - platformFee - gatewayFee).toFixed(2)
+              );
+            } else {
+              // Buyer Pays
+              gatewayFee = Number(((price + platformFee) * 0.02).toFixed(2));
+              finalPrice = Number(
+                (price + platformFee + gatewayFee).toFixed(2)
+              );
+              settlementAmount = price;
+            }
+          }
+
+          return {
+            ...t,
+            price,
+            quantity: Number(t.quantity),
+            platformFee,
+            gatewayFee,
+            settlementAmount,
+            finalPrice,
+          };
+        });
+
         await updateDoc(docRef, {
           name: formData.name,
           category: formData.category,
@@ -273,7 +435,7 @@ export default function NewEvent() {
           platformFeePayer: formData.platformFeePayer,
           platformFeePercentage: formData.platformFeePercentage,
           mediaOrientation: formData.mediaOrientation || null,
-          ticketTypes: formData.ticketTypes,
+          ticketTypes: processedTicketTypes,
           registrationFields: formData.registrationFields,
           organizerName: formData.organizerName,
           organizerDescription: formData.organizerDescription,
@@ -281,6 +443,46 @@ export default function NewEvent() {
           updatedAt: serverTimestamp(),
         });
       } else {
+        // Calculate detailed ticket stats
+        const processedTicketTypes = formData.ticketTypes.map((t) => {
+          const price = Number(t.price) || 0;
+          const feePercentage = formData.platformFeePercentage || 2;
+          let platformFee = 0;
+          let gatewayFee = 0;
+          let settlementAmount = 0;
+          let finalPrice = 0;
+
+          if (formData.isPaid && price > 0) {
+            platformFee =
+              Math.round(((price * feePercentage) / 100) * 100) / 100;
+
+            if (formData.platformFeePayer === "organizer") {
+              gatewayFee = Number((price * 0.02).toFixed(2));
+              finalPrice = price;
+              settlementAmount = Number(
+                (price - platformFee - gatewayFee).toFixed(2)
+              );
+            } else {
+              // Buyer Pays
+              gatewayFee = Number(((price + platformFee) * 0.02).toFixed(2));
+              finalPrice = Number(
+                (price + platformFee + gatewayFee).toFixed(2)
+              );
+              settlementAmount = price;
+            }
+          }
+
+          return {
+            ...t,
+            price,
+            quantity: Number(t.quantity),
+            platformFee,
+            gatewayFee,
+            settlementAmount,
+            finalPrice,
+          };
+        });
+
         // 🆕 Create new draft
         docRef = await addDoc(collection(db, "event_drafts"), {
           name: formData.name,
@@ -295,7 +497,7 @@ export default function NewEvent() {
           platformFeePayer: formData.platformFeePayer,
           platformFeePercentage: formData.platformFeePercentage,
           mediaOrientation: formData.mediaOrientation || null,
-          ticketTypes: formData.ticketTypes,
+          ticketTypes: processedTicketTypes,
           registrationFields: formData.registrationFields,
           organizerName: formData.organizerName,
           organizerDescription: formData.organizerDescription,
@@ -346,6 +548,43 @@ export default function NewEvent() {
     const submitPromise = async () => {
       let docRef;
 
+      // Calculate detailed ticket stats
+      const processedTicketTypes = formData.ticketTypes.map((t) => {
+        const price = Number(t.price) || 0;
+        const feePercentage = formData.platformFeePercentage || 2;
+        let platformFee = 0;
+        let gatewayFee = 0;
+        let settlementAmount = 0;
+        let finalPrice = 0;
+
+        if (formData.isPaid && price > 0) {
+          platformFee = Math.round(((price * feePercentage) / 100) * 100) / 100;
+
+          if (formData.platformFeePayer === "organizer") {
+            gatewayFee = Number((price * 0.02).toFixed(2));
+            finalPrice = price;
+            settlementAmount = Number(
+              (price - platformFee - gatewayFee).toFixed(2)
+            );
+          } else {
+            // Buyer Pays
+            gatewayFee = Number(((price + platformFee) * 0.02).toFixed(2));
+            finalPrice = Number((price + platformFee + gatewayFee).toFixed(2));
+            settlementAmount = price;
+          }
+        }
+
+        return {
+          ...t,
+          price,
+          quantity: Number(t.quantity),
+          platformFee,
+          gatewayFee,
+          settlementAmount,
+          finalPrice,
+        };
+      });
+
       // ✅ Extract only Firestore-safe fields
       const eventData = {
         name: formData.name,
@@ -360,13 +599,16 @@ export default function NewEvent() {
         platformFeePayer: formData.platformFeePayer,
         platformFeePercentage: formData.platformFeePercentage,
         mediaOrientation: formData.mediaOrientation || null,
-        ticketTypes: formData.ticketTypes,
+        ticketTypes: processedTicketTypes,
         creatorEmail: user?.email,
         registrationFields: formData.registrationFields,
         organizerName: formData.organizerName,
         organizerDescription: formData.organizerDescription,
+        redirectUrl: formData.redirectUrl || null,
         status: "published",
       };
+
+      let finalDocId = publishedId;
 
       if (publishedId) {
         // 🔁 Update existing published event
@@ -380,25 +622,50 @@ export default function NewEvent() {
         docRef = await addDoc(collection(db, "published_events"), {
           ...eventData,
           posterUrl: null,
+          registrationOpen: true,
           createdAt: serverTimestamp(),
         });
 
         setPublishedId(docRef.id);
+        finalDocId = docRef.id;
       }
 
       // 🖼 Upload poster (Storage only)
+      // 🖼 Upload poster (Storage only) OR Use Existing URL
       if (formData.poster) {
         const posterRef = ref(
           storage,
-          `event-posters/${docRef.id}/${formData.poster.name}`
+          `event-posters/${finalDocId}/${formData.poster.name}`
         );
 
         await uploadBytes(posterRef, formData.poster);
         const posterUrl = await getDownloadURL(posterRef);
 
-        await updateDoc(doc(db, "published_events", docRef.id), {
+        await updateDoc(doc(db, "published_events", finalDocId!), {
           posterUrl,
         });
+      } else if (
+        formData.posterPreview &&
+        formData.posterPreview.startsWith("http")
+      ) {
+        // Use existing URL from draft/edit
+        await updateDoc(doc(db, "published_events", finalDocId!), {
+          posterUrl: formData.posterPreview,
+        });
+      }
+
+      // 🔗 Generate Public Share Link (Slug)
+      if (finalDocId) {
+        const slug = slugify(formData.name);
+        const constructedShareUrl = `${SITE_URL}/events/${slug}--${finalDocId}`;
+        const path = `${slug}--${finalDocId}`;
+
+        await updateDoc(doc(db, "published_events", finalDocId), {
+          slug: path,
+          shareUrl: constructedShareUrl,
+        });
+
+        setShareUrl(constructedShareUrl);
       }
 
       // 🧹 Delete draft after successful publish
@@ -415,7 +682,8 @@ export default function NewEvent() {
         success: "Event published successfully 🎉",
         error: "Failed to publish event ❌",
       });
-      router.push("/dashboard/organizer/manage-events");
+      // router.push("/dashboard/organizer/manage-events"); // OLD REDIRECT
+      setShowShareModal(true); // NEW: Show Modal
     } finally {
       setIsSubmitting(false);
     }
@@ -749,6 +1017,25 @@ export default function NewEvent() {
                   />
                 </div>
               </div>
+
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Post-Registration Redirect (WhatsApp Group / Website URL)
+                </label>
+                <p className="text-xs text-gray-500 -mt-3 mb-2">
+                  Users will be redirected here after successful registration.
+                  Optional.
+                </p>
+                <input
+                  type="url"
+                  value={formData.redirectUrl || ""}
+                  onChange={(e) =>
+                    updateFormData({ redirectUrl: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all placeholder:text-gray-400"
+                  placeholder="https://chat.whatsapp.com/ or https://example.com"
+                />
+              </div>
             </div>
           )}
 
@@ -949,9 +1236,14 @@ export default function NewEvent() {
                       Me (Organizer absorbs fee)
                     </button>
                     <button
-                      disabled
-                      className="px-4 py-2 rounded-lg text-sm font-medium border transition-all bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                      title="This feature is temporarily disabled"
+                      onClick={() =>
+                        updateFormData({ platformFeePayer: "buyer" })
+                      }
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                        formData.platformFeePayer === "buyer"
+                          ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                      }`}
                     >
                       Buyer (Pass fee to customer)
                     </button>
@@ -1081,33 +1373,75 @@ export default function NewEvent() {
                               </span>
                             </div>
 
-                            <div className="flex justify-between items-center text-red-600">
-                              <span>
-                                GraburPass Platform Fee ({feePercentage}%)
-                              </span>
-                              <span>-₹{fee.toFixed(2)}</span>
-                            </div>
+                            {formData.platformFeePayer === "organizer" ? (
+                              <>
+                                <div className="flex justify-between items-center text-red-600">
+                                  <span>
+                                    GraburPass Platform Fee ({feePercentage}%)
+                                  </span>
+                                  <span>-₹{fee.toFixed(2)}</span>
+                                </div>
 
-                            <div className="flex justify-between items-start pt-1">
-                              <div>
-                                <span className="text-gray-900">
-                                  Payment Gateway Charges
-                                </span>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  (dependent on payment method)
-                                </p>
-                              </div>
-                              <span className="text-gray-500 text-right text-xs bg-gray-100 px-2 py-1 rounded">
-                                Calculated at checkout*
-                              </span>
-                            </div>
+                                <div className="flex justify-between items-center pt-1 text-red-600">
+                                  <div>
+                                    <span className="">
+                                      Gateway Charges (~2% of Total)
+                                    </span>
+                                  </div>
+                                  <span>-₹{(price * 0.02).toFixed(2)}</span>
+                                </div>
 
-                            <div className="my-3 border-t-2 border-dashed border-gray-100" />
+                                <div className="my-3 border-t-2 border-dashed border-gray-100" />
 
-                            <div className="flex justify-between items-center font-bold text-base text-green-700">
-                              <span>Estimated You Receive</span>
-                              <span>₹{organizerGets.toFixed(2)}</span>
-                            </div>
+                                <div className="flex justify-between items-center font-bold text-base text-green-700">
+                                  <span>Estimated You Receive</span>
+                                  <span>
+                                    ₹{(price - fee - price * 0.02).toFixed(2)}
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex justify-between items-center text-gray-600">
+                                  <span>
+                                    GraburPass Platform Fee ({feePercentage}% -
+                                    Paid by Buyer)
+                                  </span>
+                                  <span>+₹{fee.toFixed(2)}</span>
+                                </div>
+
+                                <div className="flex justify-between items-start pt-1 text-gray-600">
+                                  <div>
+                                    <span className="">
+                                      Gateway Charges (~2% of Total - Paid by
+                                      Buyer)
+                                    </span>
+                                  </div>
+                                  <span>
+                                    +₹{((price + fee) * 0.02).toFixed(2)}
+                                  </span>
+                                </div>
+
+                                <div className="my-3 border-t-2 border-dashed border-gray-100" />
+
+                                <div className="flex justify-between items-center font-bold text-base text-gray-900 border-b border-gray-100 pb-3 mb-3">
+                                  <span>Customer Pays</span>
+                                  <span>
+                                    ₹
+                                    {(
+                                      price +
+                                      fee +
+                                      (price + fee) * 0.02
+                                    ).toFixed(2)}
+                                  </span>
+                                </div>
+
+                                <div className="flex justify-between items-center font-bold text-base text-green-700">
+                                  <span>You Receive</span>
+                                  <span>₹{price.toFixed(2)}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           <div className="mt-4 p-3 bg-blue-50/50 rounded-lg text-xs text-blue-800 leading-relaxed border border-blue-100/50">
@@ -1261,7 +1595,11 @@ export default function NewEvent() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Event Poster/Banner
                 </label>
-                {formData.posterPreview ? (
+                {loading ? (
+                  <div className="w-full max-w-md h-64 bg-gray-200 rounded-md animate-pulse flex items-center justify-center">
+                    <Image className="h-12 w-12 text-gray-300" />
+                  </div>
+                ) : formData.posterPreview ? (
                   <div className="relative">
                     <img
                       src={formData.posterPreview}
@@ -1418,19 +1756,24 @@ export default function NewEvent() {
                   <h5 className="font-bold mt-3">1. Platform Role</h5>
                   <p>
                     GraburPass is an event ticketing and discovery platform that
-                    enables organizers to list events, sell tickets, and collect
-                    payments through integrated payment gateways. GraburPass
-                    does not organize events and is not responsible for event
-                    execution.
+                    prevents events from organizing events and is not
+                    responsible for event execution.
                   </p>
 
                   <h5 className="font-bold mt-3">2. Event Responsibility</h5>
-                  <p>
-                    The Organizer is solely responsible for: Event content,
-                    scheduling, venue, and execution; Accuracy of event details,
-                    pricing, and ticket limits; Compliance with local laws,
-                    permissions, and licenses. GraburPass is not liable for
-                    event cancellation, postponement, or quality of service.
+                  <p>The Organizer is solely responsible for:</p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Event content, scheduling, venue, and execution</li>
+                    <li>
+                      Accuracy of event details, pricing, and ticket limits
+                    </li>
+                    <li>
+                      Compliance with local laws, permissions, and licenses
+                    </li>
+                  </ul>
+                  <p className="mt-2">
+                    GraburPass is not liable for event cancellation,
+                    postponement, or quality of service.
                   </p>
 
                   <h5 className="font-bold mt-3">3. Ticket Pricing & Sales</h5>
@@ -1440,117 +1783,204 @@ export default function NewEvent() {
                     Customers pay the ticket price displayed at checkout.
                   </p>
 
-                  <h5 className="font-bold mt-3">4. Platform Fee</h5>
-                  <p>
-                    GraburPass charges a platform service fee, as agreed during
-                    event creation. The platform fee is deducted from the total
-                    ticket revenue before settlement. Platform fees are
-                    non-refundable, even in case of refunds or cancellations,
-                    unless explicitly stated.
-                  </p>
+                  {formData.isPaid ? (
+                    <>
+                      <h5 className="font-bold mt-3">
+                        4. Platform Fee (Paid Events)
+                      </h5>
+                      <p>
+                        For paid events, GraburPass charges a platform service
+                        fee as agreed during event creation.
+                      </p>
+                      <p>
+                        The platform fee is deducted from the total ticket
+                        revenue before settlement.
+                      </p>
+                      <p>
+                        Platform fees are non-refundable, even in case of
+                        refunds or cancellations, unless explicitly stated.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h5 className="font-bold mt-3">
+                        4. Free Events & Fixed Listing Fee
+                      </h5>
+                      <p>
+                        For free events, GraburPass charges a fixed event
+                        listing fee of ₹100 per event.
+                      </p>
+                      <p>
+                        This fee must be paid before the event is published.
+                      </p>
+                      <p>
+                        The ₹100 listing fee is non-refundable, even if the
+                        event is canceled or modified.
+                      </p>
+                    </>
+                  )}
 
                   <h5 className="font-bold mt-3">5. Payment Gateway Charges</h5>
                   <p>
                     Payment gateway charges are applied by third-party payment
-                    providers (e.g., Cashfree). Gateway charges vary based on
-                    payment method (UPI, cards, net banking, wallets, etc.).
+                    providers (e.g., Cashfree).
+                  </p>
+                  <p>
+                    Charges vary based on payment method (UPI, cards, net
+                    banking, wallets, etc.).
+                  </p>
+                  <p>
                     These charges are deducted from the Organizer’s settlement
-                    amount. GraburPass does not control or guarantee gateway fee
-                    rates.
+                    amount.
+                  </p>
+                  <p>
+                    GraburPass does not control or guarantee gateway fee rates.
                   </p>
 
                   <h5 className="font-bold mt-3">6. Settlements & Payouts</h5>
                   <p>
                     Ticket collections are settled to the Organizer’s registered
-                    bank account. Settlement timelines depend on the payment
-                    gateway (typically T+2 working days). Final payout = Total
-                    Ticket Revenue – Platform Fee – Gateway Charges – Applicable
-                    Deductions. GraburPass is not responsible for settlement
-                    delays caused by banks, gateways, or compliance checks.
+                    bank account.
                   </p>
-
-                  <h5 className="font-bold mt-3">
-                    7. Free Events & Fixed Fees (If Applicable)
-                  </h5>
                   <p>
-                    For free events or special plans, GraburPass may charge a
-                    fixed event listing fee. Applicable fees will be clearly
-                    communicated before event publishing.
+                    Settlement timelines depend on the payment gateway
+                    (typically T+2 working days).
+                  </p>
+                  <p className="font-semibold mt-2">
+                    Final payout = Total Ticket Revenue – Platform Fee – Payment
+                    Gateway Charges – Applicable Deductions
+                  </p>
+                  <p className="mt-2">
+                    GraburPass is not responsible for settlement delays caused
+                    by banks, payment gateways, or compliance checks.
                   </p>
 
-                  <h5 className="font-bold mt-3">8. Refunds & Cancellations</h5>
+                  <h5 className="font-bold mt-3">7. Refunds & Cancellations</h5>
                   <p>
                     Refund policies are defined by the Organizer. In case of
-                    refunds: Gateway charges may not be refundable; Platform
-                    fees may be retained unless otherwise stated. GraburPass may
-                    assist with refunds but is not liable for refund disputes.
+                    refunds:
+                  </p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Payment gateway charges may not be refundable</li>
+                    <li>
+                      Platform fees or listing fees may be retained unless
+                      otherwise stated
+                    </li>
+                  </ul>
+                  <p className="mt-2">
+                    GraburPass may assist with refunds but is not liable for
+                    refund-related disputes.
                   </p>
 
                   <h5 className="font-bold mt-3">
-                    9. Compliance & Verification
+                    8. Compliance & Verification
                   </h5>
                   <p>
                     Organizers must provide valid business and identity
                     documents (PAN, bank details, etc.). GraburPass reserves the
-                    right to: Pause settlements; Request additional documents;
-                    Suspend accounts in case of non-compliance or suspicious
-                    activity.
+                    right to:
                   </p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Pause settlements</li>
+                    <li>Request additional documents</li>
+                    <li>
+                      Suspend accounts in case of non-compliance or suspicious
+                      activity
+                    </li>
+                  </ul>
 
-                  <h5 className="font-bold mt-3">10. Prohibited Activities</h5>
-                  <p>
-                    Organizers must NOT: Sell illegal, misleading, or prohibited
-                    services; Create fake or misleading events; Use GraburPass
-                    for money laundering or fraudulent activities. Violation may
-                    result in account suspension and withholding of payouts.
+                  <h5 className="font-bold mt-3">9. Prohibited Activities</h5>
+                  <p>Organizers must NOT:</p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Sell illegal, misleading, or prohibited services</li>
+                    <li>Create fake or misleading events</li>
+                    <li>
+                      Use GraburPass for money laundering or fraudulent
+                      activities
+                    </li>
+                  </ul>
+                  <p className="mt-2">
+                    Violation may result in account suspension and withholding
+                    of payouts.
                   </p>
 
                   <h5 className="font-bold mt-3">
-                    11. Limitation of Liability
+                    10. Limitation of Liability
                   </h5>
-                  <p>
-                    GraburPass shall not be liable for: Event failure or losses
-                    incurred by the Organizer; Customer disputes beyond payment
-                    facilitation; Technical failures beyond reasonable control.
-                  </p>
+                  <p>GraburPass shall not be liable for:</p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Event failure or losses incurred by the Organizer</li>
+                    <li>Customer disputes beyond payment facilitation</li>
+                    <li>Technical failures beyond reasonable control</li>
+                  </ul>
 
-                  <h5 className="font-bold mt-3">12. Agreement Acceptance</h5>
+                  <h5 className="font-bold mt-3">11. Agreement Acceptance</h5>
                   <p>
                     By clicking “Publish Event” or “Complete Event Setup”, the
-                    Organizer confirms that they: Have read and understood these
-                    terms; Agree to all fees, deductions, and settlement
-                    conditions; Are legally authorized to conduct the event.
+                    Organizer confirms that they:
                   </p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Have read and understood these terms</li>
+                    <li>
+                      Agree to all applicable fees, deductions, and settlement
+                      conditions
+                    </li>
+                    <li>Are legally authorized to conduct the event</li>
+                  </ul>
 
-                  <h5 className="font-bold mt-3">13. Contact</h5>
+                  <h5 className="font-bold mt-3">12. Contact</h5>
                   <p>
                     For any queries related to payouts, fees, or compliance:
-                    📧beondinnovations@gmail.com, 9946846101
+                    <br />
+                    📧 beondinnovations@gmail.com
+                    <br />
+                    📞 9946846101
                   </p>
                 </div>
 
-                <label className="flex items-start space-x-3 cursor-pointer group">
-                  <div className="relative flex items-center mt-0.5">
-                    <input
-                      type="checkbox"
-                      checked={formData.termsAccepted}
-                      onChange={(e) =>
-                        updateFormData({ termsAccepted: e.target.checked })
-                      }
-                      className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-gray-300 transition-all checked:border-red-600 checked:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/20"
-                    />
-                    <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 transition-opacity peer-checked:opacity-100">
-                      <Check className="h-3.5 w-3.5" />
+                <div className="flex justify-between items-center mb-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group">
+                    <div className="relative flex items-center mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={formData.termsAccepted}
+                        onChange={(e) =>
+                          updateFormData({ termsAccepted: e.target.checked })
+                        }
+                        className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-gray-300 transition-all checked:border-red-600 checked:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/20"
+                      />
+                      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 transition-opacity peer-checked:opacity-100">
+                        <Check className="h-3.5 w-3.5" />
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors select-none">
-                    I have read and agree to the{" "}
-                    <span className="font-semibold text-gray-900">
-                      Organizer Terms & Conditions
+                    <span className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors select-none">
+                      I have read and agree to the{" "}
+                      <span className="font-semibold text-gray-900">
+                        Organizer Terms & Conditions
+                      </span>
+                      .
                     </span>
-                    .
-                  </span>
-                </label>
+                  </label>
+                  <button
+                    onClick={async () => {
+                      const blob = await pdf(
+                        <TermsDocument isPaid={formData.isPaid} />
+                      ).toBlob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "GraburPass_Organizer_Terms.pdf";
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex items-center text-sm text-red-600 hover:text-red-700 font-medium transition-colors"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Download Terms (PDF)
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1610,6 +2040,424 @@ export default function NewEvent() {
           </div>
         </div>
       </div>
+
+      {/* SUCCESS MODAL */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="w-8 h-8 text-green-600" />
+              </div>
+
+              <h3 className="text-2xl font-bold text-gray-900">
+                Event Published! 🎉
+              </h3>
+              <p className="text-gray-500">
+                Your event is now live and ready to accept bookings. Share the
+                link with your audience!
+              </p>
+
+              <div className="bg-gray-50 p-3 rounded-lg flex items-center gap-3 border border-gray-200 mt-4">
+                <p className="text-sm text-gray-600 truncate flex-1 font-medium font-mono">
+                  {shareUrl}
+                </p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    toast.success("Link copied!");
+                  }}
+                  className="p-2 hover:bg-white rounded-md transition-colors text-gray-500 hover:text-green-600 shadow-sm"
+                  title="Copy Link"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <button
+                  onClick={() => window.open(shareUrl, "_blank")}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-gray-100 rounded-xl font-bold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all"
+                >
+                  <Eye className="w-4 h-4" />
+                  View Page
+                </button>
+                <button
+                  onClick={() =>
+                    router.push("/dashboard/organizer/manage-events")
+                  }
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// ----------------------------------------------------------------------
+// PDF DOCUMENT DEFINITION
+// ----------------------------------------------------------------------
+
+const pdfStyles = StyleSheet.create({
+  mail: {
+    marginLeft: 10,
+  },
+  contact: {
+    marginLeft: 10,
+  },
+  page: {
+    padding: 40,
+    fontFamily: "Helvetica",
+    fontSize: 10,
+    lineHeight: 1.5,
+    color: "#333",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  logo: {
+    width: 280,
+    height: 30,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerText: {
+    marginLeft: 15,
+    flexDirection: "column",
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: "Helvetica-Bold",
+    color: "#111",
+  },
+  subtitle: {
+    fontSize: 10,
+    color: "#666",
+    marginTop: 2,
+  },
+  headerRight: {
+    alignItems: "flex-end",
+  },
+  metaText: {
+    fontSize: 8,
+    color: "#999",
+    marginBottom: 2,
+  },
+  section: {
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 4,
+    color: "#000",
+    marginTop: 5,
+  },
+  paragraph: {
+    textAlign: "justify",
+    marginBottom: 5,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 30,
+    left: 40,
+    right: 40,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 8,
+    color: "#aaa",
+  },
+});
+
+const TermsDocument = ({ isPaid }: { isPaid: boolean }) => (
+  <Document>
+    <Page size="A4" style={pdfStyles.page}>
+      <View style={pdfStyles.header}>
+        <View style={pdfStyles.headerLeft}>
+          <PdfImage src="/pdf.png" style={pdfStyles.logo} />
+          <View style={pdfStyles.headerText}>
+            <Text style={pdfStyles.title}>GraburPass</Text>
+            <Text style={pdfStyles.subtitle}>Organizer Terms & Conditions</Text>
+          </View>
+        </View>
+        <View style={pdfStyles.headerRight}>
+          <Text style={pdfStyles.metaText}>Generated on:</Text>
+          <Text style={pdfStyles.metaText}>
+            {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={[pdfStyles.paragraph, { marginBottom: 15 }]}>
+        By creating and publishing an event on GraburPass, you (“Organizer”)
+        agree to the following terms and conditions.
+      </Text>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>1. Platform Role</Text>
+        <Text style={pdfStyles.paragraph}>
+          GraburPass is an event ticketing and discovery platform that enables
+          organizers to list events, sell tickets, and collect payments through
+          integrated payment gateways. GraburPass does not organize events and
+          is not responsible for event execution.
+        </Text>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>2. Event Responsibility</Text>
+        <Text style={pdfStyles.paragraph}>
+          The Organizer is solely responsible for:
+        </Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>
+            • Event content, scheduling, venue, and execution
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Accuracy of event details, pricing, and ticket limits
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Compliance with local laws, permissions, and licenses
+          </Text>
+        </View>
+        <Text style={pdfStyles.paragraph}>
+          GraburPass is not liable for event cancellation, postponement, or
+          quality of service.
+        </Text>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>3. Ticket Pricing & Sales</Text>
+        <Text style={pdfStyles.paragraph}>
+          Ticket prices are set by the Organizer. All ticket sales are processed
+          through GraburPass’s authorized payment partners. Customers pay the
+          ticket price displayed at checkout.
+        </Text>
+      </View>
+
+      {isPaid ? (
+        <View style={pdfStyles.section}>
+          <Text style={pdfStyles.sectionTitle}>
+            4. Platform Fee (Paid Events)
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            For paid events, GraburPass charges a platform service fee as agreed
+            during event creation. The platform fee is deducted from the total
+            ticket revenue before settlement. Platform fees are non-refundable,
+            even in case of refunds or cancellations, unless explicitly stated.
+          </Text>
+        </View>
+      ) : (
+        <View style={pdfStyles.section}>
+          <Text style={pdfStyles.sectionTitle}>
+            4. Free Events & Fixed Listing Fee
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            For free events, GraburPass charges a fixed event listing fee of
+            ₹100 per event. This fee must be paid before the event is published.
+            The ₹100 listing fee is non-refundable, even if the event is
+            canceled or modified.
+          </Text>
+        </View>
+      )}
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>5. Payment Gateway Charges</Text>
+        <Text style={pdfStyles.paragraph}>
+          Payment gateway charges are applied by third-party payment providers
+          (e.g., Cashfree). Charges vary based on payment method (UPI, cards,
+          net banking, wallets, etc.). These charges are deducted from the
+          Organizer’s settlement amount. GraburPass does not control or
+          guarantee gateway fee rates.
+        </Text>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>6. Settlements & Payouts</Text>
+        <Text style={pdfStyles.paragraph}>
+          Ticket collections are settled to the Organizer’s registered bank
+          account. Settlement timelines depend on the payment gateway (typically
+          T+2 working days).
+        </Text>
+        <Text
+          style={[
+            pdfStyles.paragraph,
+            { fontFamily: "Helvetica-Bold", marginTop: 4 },
+          ]}
+        >
+          Final payout = Total Ticket Revenue – Platform Fee – Payment Gateway
+          Charges – Applicable Deductions
+        </Text>
+        <Text style={pdfStyles.paragraph}>
+          GraburPass is not responsible for settlement delays caused by banks,
+          payment gateways, or compliance checks.
+        </Text>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>7. Refunds & Cancellations</Text>
+        <Text style={pdfStyles.paragraph}>
+          Refund policies are defined by the Organizer. In case of refunds:
+        </Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>
+            • Payment gateway charges may not be refundable
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Platform fees or listing fees may be retained unless otherwise
+            stated
+          </Text>
+        </View>
+        <Text style={pdfStyles.paragraph}>
+          GraburPass may assist with refunds but is not liable for
+          refund-related disputes.
+        </Text>
+      </View>
+      <View style={pdfStyles.footer} fixed>
+        <Text style={pdfStyles.footerText}>www.graburpass.com</Text>
+        <Text
+          style={pdfStyles.footerText}
+          render={({ pageNumber, totalPages }) =>
+            `${pageNumber} / ${totalPages}`
+          }
+        />
+      </View>
+    </Page>
+    <Page size="A4" style={pdfStyles.page}>
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>8. Compliance & Verification</Text>
+        <Text style={pdfStyles.paragraph}>
+          Organizers must provide valid business and identity documents (PAN,
+          bank details, etc.). GraburPass reserves the right to:
+        </Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>• Pause settlements</Text>
+          <Text style={pdfStyles.paragraph}>
+            • Request additional documents
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Suspend accounts in case of non-compliance or suspicious activity
+          </Text>
+        </View>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>9. Prohibited Activities</Text>
+        <Text style={pdfStyles.paragraph}>Organizers must NOT:</Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>
+            • Sell illegal, misleading, or prohibited services
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Create fake or misleading events
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Use GraburPass for money laundering or fraudulent activities
+          </Text>
+        </View>
+        <Text style={pdfStyles.paragraph}>
+          Violation may result in account suspension and withholding of payouts.
+        </Text>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>10. Limitation of Liability</Text>
+        <Text style={pdfStyles.paragraph}>
+          GraburPass shall not be liable for:
+        </Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>
+            • Event failure or losses incurred by the Organizer
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Customer disputes beyond payment facilitation
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Technical failures beyond reasonable control
+          </Text>
+        </View>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>11. Agreement Acceptance</Text>
+        <Text style={pdfStyles.paragraph}>
+          By clicking “Publish Event” or “Complete Event Setup”, the Organizer
+          confirms that they:
+        </Text>
+        <View style={{ marginLeft: 10 }}>
+          <Text style={pdfStyles.paragraph}>
+            • Have read and understood these terms
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Agree to all applicable fees, deductions, and settlement
+            conditions
+          </Text>
+          <Text style={pdfStyles.paragraph}>
+            • Are legally authorized to conduct the event
+          </Text>
+        </View>
+      </View>
+
+      <View style={pdfStyles.section}>
+        <Text style={pdfStyles.sectionTitle}>12. Contact</Text>
+        <Text style={pdfStyles.paragraph}>
+          For any queries related to payouts, fees, or compliance:
+        </Text>
+        <View style={{ marginLeft: 10, marginTop: 4 }}>
+          <View style={{ flexDirection: "row", marginBottom: 2 }}>
+            <Text
+              style={{
+                width: 40,
+                fontSize: 10,
+                fontFamily: "Helvetica-Bold",
+              }}
+            >
+              Email:
+            </Text>
+            <Text style={{ fontSize: 10 }}>beondinnovations@gmail.com</Text>
+          </View>
+          <View style={{ flexDirection: "row" }}>
+            <Text
+              style={{
+                width: 40,
+                fontSize: 10,
+                fontFamily: "Helvetica-Bold",
+              }}
+            >
+              Phone:
+            </Text>
+            <Text style={{ fontSize: 10 }}>9946846101</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={pdfStyles.footer} fixed>
+        <Text style={pdfStyles.footerText}>www.graburpass.com</Text>
+        <Text
+          style={pdfStyles.footerText}
+          render={({ pageNumber, totalPages }) =>
+            `${pageNumber} / ${totalPages}`
+          }
+        />
+      </View>
+    </Page>
+  </Document>
+);

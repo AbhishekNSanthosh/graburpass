@@ -275,6 +275,7 @@ export default function PublicEventPage() {
                       : "Free"}
                   </p>
                   <button
+                    disabled={event.registrationOpen === false}
                     onClick={() => {
                       const ticketSection = document.getElementById("tickets");
                       if (ticketSection) {
@@ -283,10 +284,20 @@ export default function PublicEventPage() {
                         setTimeout(() => setHighlightTickets(false), 2000);
                       }
                     }}
-                    className="w-full bg-red-600 text-white px-6 py-3.5 rounded-xl font-bold text-base hover:bg-red-700 transition-all shadow-lg hover:shadow-red-600/30 flex items-center justify-center transform active:scale-[0.98] group"
+                    className={`w-full px-6 py-3.5 rounded-xl font-bold text-base transition-all shadow-lg flex items-center justify-center transform group ${
+                      event.registrationOpen === false
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none"
+                        : "bg-red-600 text-white hover:bg-red-700 hover:shadow-red-600/30 active:scale-[0.98]"
+                    }`}
                   >
-                    <Ticket className="h-5 w-5 mr-2 group-hover:-rotate-12 transition-transform" />
-                    Book Now
+                    {event.registrationOpen === false ? (
+                      "Registration Closed"
+                    ) : (
+                      <>
+                        <Ticket className="h-5 w-5 mr-2 group-hover:-rotate-12 transition-transform" />
+                        Book Now
+                      </>
+                    )}
                   </button>
                 </div>
                 <p className="text-[10px] text-center text-gray-400 mt-0 px-4 leading-relaxed">
@@ -401,6 +412,12 @@ export default function PublicEventPage() {
 
                     <button
                       onClick={() => {
+                        if (isPreview) {
+                          toast("Preview Mode: Booking disabled", {
+                            icon: "🔒",
+                          });
+                          return;
+                        }
                         if (selectedTicketIndex !== null) {
                           router.push(
                             `/events/book/${slugId}?ticketIdx=${selectedTicketIndex}`
@@ -409,15 +426,29 @@ export default function PublicEventPage() {
                           toast.error("Please select a ticket first");
                         }
                       }}
-                      disabled={selectedTicketIndex === null}
+                      disabled={
+                        selectedTicketIndex === null ||
+                        isPreview ||
+                        event.registrationOpen === false
+                      }
                       className={`w-full py-4 rounded-xl font-bold text-base flex items-center justify-center transition-all ${
-                        selectedTicketIndex !== null
+                        selectedTicketIndex !== null &&
+                        !isPreview &&
+                        event.registrationOpen !== false
                           ? "bg-red-600 text-white shadow-xl hover:bg-red-700 transform active:scale-[0.98]"
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >
-                      Proceed to Book{" "}
-                      <ArrowLeft className="w-5 h-5 ml-2 rotate-180" />
+                      {isPreview ? (
+                        "Preview Mode"
+                      ) : event.registrationOpen === false ? (
+                        "Registration Closed"
+                      ) : (
+                        <>
+                          Proceed to Book{" "}
+                          <ArrowLeft className="w-5 h-5 ml-2 rotate-180" />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

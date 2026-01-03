@@ -25,17 +25,23 @@ export default function Sidebar() {
 
   return (
     <div className="w-full h-screen flex flex-col bg-white fixed">
-      
       {/* Logo */}
-      <div className="w-full flex items-center justify-center pt-[5vh] pb-[3vh]">
-       <span className="text-primary font-bold text-xl"> Graburpass</span>
+      <div className="w-full flex items-center justify-center h-24">
+        <Link href="/" className="relative h-10 w-40 block">
+          <Image
+            src="/mainlogo.svg"
+            alt="Graburpass"
+            fill
+            className="object-contain"
+            priority
+          />
+        </Link>
       </div>
 
       {/* Sections */}
-      <div className="flex-1 overflow-y-auto mt-4 space-y-6">
+      <div className="flex-1 overflow-y-auto space-y-6">
         {sidebarSections.map((section, index) => (
           <div key={index}>
-            
             {/* Section Label */}
             {section.label && (
               <p className="px-4 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">

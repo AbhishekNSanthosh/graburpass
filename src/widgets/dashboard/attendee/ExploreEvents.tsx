@@ -1,11 +1,10 @@
-"use client"
-import React, { useState } from 'react';
+"use client";
+import React, { useEffect, useState } from "react";
 import {
   Search,
   Calendar,
   MapPin,
   Filter,
-  ChevronDown,
   TrendingUp,
   Star,
   Clock,
@@ -13,363 +12,357 @@ import {
   Ticket,
   ChevronLeft,
   ChevronRight,
-} from 'lucide-react';
+  Loader2,
+} from "lucide-react";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { db } from "@/utils/configs/firebaseConfig";
+import Image from "next/image";
+import Link from "next/link";
+
+/* ================= TYPES ================= */
 
 interface Event {
   id: string;
-  banner: string;
   name: string;
-  date: string; // ISO date
+  slug?: string;
+  posterUrl?: string;
+  date: string;
   location: string;
-  locationType: 'online' | 'offline';
-  price: number | null; // null for free
-  category: string;
+  locationType?: "online" | "offline";
+  price: number | null;
+  category?: string;
+  description?: string;
+  sales?: number;
+  attendees?: number;
 }
 
+/* ================= COMPONENT ================= */
+
 export default function ExploreEvents() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedPrice, setSelectedPrice] = useState<'all' | 'free' | 'paid'>('all');
-  const [selectedLocation, setSelectedLocation] = useState<'all' | 'online' | 'offline'>('all');
-  const [dateFilter, setDateFilter] = useState<'upcoming' | 'all'>('upcoming');
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filters State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedPrice, setSelectedPrice] = useState<"all" | "free" | "paid">(
+    "all"
+  );
+  const [dateFilter, setDateFilter] = useState<"upcoming" | "all">("upcoming");
+
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 9;
 
-  // Mock data (filtered by current date: Dec 13, 2025)
-  const allEvents: Event[] = [
-    {
-      id: '1',
-      banner: '/event-banner-1.jpg',
-      name: 'React Conf 2026',
-      date: '2026-01-15',
-      location: 'Bengaluru Convention Center',
-      locationType: 'offline',
-      price: 499,
-      category: 'Conference',
-    },
-    {
-      id: '2',
-      banner: '/event-banner-2.jpg',
-      name: 'AI Workshop Online',
-      date: '2025-12-20',
-      location: 'Zoom Webinar',
-      locationType: 'online',
-      price: null,
-      category: 'Workshop',
-    },
-    {
-      id: '3',
-      banner: '/event-banner-3.jpg',
-      name: 'Startup Meetup',
-      date: '2025-12-18',
-      location: 'Kochi Startup Hub',
-      locationType: 'offline',
-      price: 299,
-      category: 'Meetup',
-    },
-    {
-      id: '4',
-      banner: '/event-banner-4.jpg',
-      name: 'Tech Seminar',
-      date: '2026-02-05',
-      location: 'Delhi Tech Park',
-      locationType: 'offline',
-      price: null,
-      category: 'Seminar',
-    },
-    {
-      id: '5',
-      banner: '/event-banner-5.jpg',
-      name: 'Dev Hackathon',
-      date: '2025-12-25',
-      location: 'Virtual Hackathon Platform',
-      locationType: 'online',
-      price: 199,
-      category: 'Workshop',
-    },
-    {
-      id: '6',
-      banner: '/event-banner-6.jpg',
-      name: 'Music Concert',
-      date: '2025-12-30',
-      location: 'Mumbai Arena',
-      locationType: 'offline',
-      price: 999,
-      category: 'Concert',
-    },
-    {
-      id: '7',
-      banner: '/event-banner-7.jpg',
-      name: 'Data Science Bootcamp',
-      date: '2026-01-10',
-      location: 'Online via Google Meet',
-      locationType: 'online',
-      price: null,
-      category: 'Workshop',
-    },
-    {
-      id: '8',
-      banner: '/event-banner-8.jpg',
-      name: 'Blockchain Summit',
-      date: '2025-12-22',
-      location: 'Hyderabad Expo',
-      locationType: 'offline',
-      price: 799,
-      category: 'Conference',
-    },
-    {
-      id: '9',
-      banner: '/event-banner-9.jpg',
-      name: 'Free Coding Meetup',
-      date: '2025-12-28',
-      location: 'Chennai Co-working Space',
-      locationType: 'offline',
-      price: null,
-      category: 'Meetup',
-    },
-    // Add more for pagination demo
-    ...Array.from({ length: 6 }, (_, i) => ({
-      id: `extra-${i}`,
-      banner: '/event-banner-placeholder.jpg',
-      name: `Extra Event ${i + 1}`,
-      date: '2026-01-20',
-      location: `Location ${i + 1}`,
-      locationType: 'offline' as const,
-      price: i % 2 === 0 ? null : 399,
-      category: 'Conference',
-    })),
-  ];
+  /* ================= FETCH DATA ================= */
 
-  const categories = ['all', 'Conference', 'Workshop', 'Meetup', 'Concert', 'Seminar'];
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setLoading(true);
+      try {
+        const eventsRef = collection(db, "published_events");
+        // Fetch all published events
+        // In a real app with many events, you'd want to paginate at the query level
+        const q = query(eventsRef, orderBy("date", "asc"));
+        const snap = await getDocs(q);
 
-  const currentDate = new Date('2025-12-13').getTime();
+        const events: Event[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as Event[];
 
-  const filteredEvents = allEvents
-    .filter(event => {
-      const eventDate = new Date(event.date).getTime();
-      const matchesSearch = event.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDate = dateFilter === 'all' || eventDate >= currentDate;
-      const matchesCategory = selectedCategory === 'all' || event.category === selectedCategory;
-      const matchesPrice = selectedPrice === 'all' || (selectedPrice === 'free' ? event.price === null : event.price !== null);
-      const matchesLocation = selectedLocation === 'all' || event.locationType === selectedLocation;
-      return matchesSearch && matchesDate && matchesCategory && matchesPrice && matchesLocation;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setAllEvents(events);
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  /* ================= FILTER LOGIC ================= */
+
+  const now = Date.now();
+
+  const filteredEvents = allEvents.filter((event) => {
+    const eventTime = new Date(event.date).getTime();
+
+    // Search
+    const matchesSearch = event.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+
+    // Category
+    const matchesCategory =
+      selectedCategory === "all" ||
+      (event.category || "Uncategorized") === selectedCategory;
+
+    // Price
+    const isFree = !event.price || event.price === 0;
+    const matchesPrice =
+      selectedPrice === "all" ||
+      (selectedPrice === "free" && isFree) ||
+      (selectedPrice === "paid" && !isFree);
+
+    // Date
+    const matchesDate =
+      dateFilter === "all" || (dateFilter === "upcoming" && eventTime >= now);
+
+    return matchesSearch && matchesCategory && matchesPrice && matchesDate;
+  });
+
+  // Calculate distinct categories from data for the dropdown
+  const categories = Array.from(
+    new Set(allEvents.map((e) => e.category || "Uncategorized"))
+  ).filter(Boolean);
+
+  /* ================= PAGINATION ================= */
 
   const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
-  const paginatedEvents = filteredEvents.slice((currentPage - 1) * eventsPerPage, currentPage * eventsPerPage);
+  const paginatedEvents = filteredEvents.slice(
+    (currentPage - 1) * eventsPerPage,
+    currentPage * eventsPerPage
+  );
 
-  // Trending/Recommended: Top 3 by mock popularity
-  const trendingEvents = filteredEvents.slice(0, 3);
+  /* ================= SKELETON ================= */
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8">
+        {/* Header Skeleton */}
+        <div className="flex flex-col gap-6">
+          <div className="h-10 w-64 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-12 w-full bg-gray-100 rounded-lg animate-pulse" />
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="flex gap-4">
+          <div className="h-10 w-32 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-10 w-32 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-10 w-32 bg-gray-100 rounded-lg animate-pulse" />
+        </div>
+
+        {/* Grid Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg p-4 space-y-4">
+              <div className="h-48 bg-gray-100 rounded-lg animate-pulse" />
+              <div className="h-6 w-3/4 bg-gray-100 rounded-lg animate-pulse" />
+              <div className="h-4 w-1/2 bg-gray-100 rounded-lg animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8 animate-fade-in-up">
       {/* Header & Search */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Explore Events</h1>
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 text-gray-400 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search events..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-          </div>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+            Explore Events
+          </h1>
+          <p className="text-gray-500 font-medium mt-1">
+            Discover and book tickets for the best events near you.
+          </p>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 h-5 w-5 text-gray-400 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search events by name..."
+            className="w-full pl-12 pr-4 py-3 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 text-gray-900 font-medium placeholder-gray-400"
+          />
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Date Filter */}
-          <div className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5 text-gray-500" />
-            <select
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value as 'upcoming' | 'all')}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="upcoming">Upcoming Events</option>
-              <option value="all">All Events</option>
-            </select>
-          </div>
+      {/* Filters Bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Date Filter */}
+        <div className="relative">
+          <Calendar className="absolute left-3 top-1/2 h-4 w-4 text-gray-500 -translate-y-1/2" />
+          <select
+            value={dateFilter}
+            onChange={(e) =>
+              setDateFilter(e.target.value as "upcoming" | "all")
+            }
+            className="pl-9 pr-4 py-2.5 bg-white rounded-lg text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer"
+          >
+            <option value="upcoming">Upcoming</option>
+            <option value="all">All Dates</option>
+          </select>
+        </div>
 
-          {/* Category Filter */}
-          <div className="flex items-center space-x-2">
-            <Filter className="h-5 w-5 text-gray-500" />
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
-              ))}
-            </select>
-          </div>
+        {/* Category Filter */}
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 text-gray-500 -translate-y-1/2" />
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="pl-9 pr-8 py-2.5 bg-white rounded-lg text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer"
+          >
+            <option value="all">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          {/* Price Filter */}
-          <div className="flex items-center space-x-2">
-            <Ticket className="h-5 w-5 text-gray-500" />
-            <select
-              value={selectedPrice}
-              onChange={e => setSelectedPrice(e.target.value as 'all' | 'free' | 'paid')}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="all">All Prices</option>
-              <option value="free">Free</option>
-              <option value="paid">Paid</option>
-            </select>
-          </div>
-
-          {/* Location Filter */}
-          <div className="flex items-center space-x-2">
-            <MapPin className="h-5 w-5 text-gray-500" />
-            <select
-              value={selectedLocation}
-              onChange={e => setSelectedLocation(e.target.value as 'all' | 'online' | 'offline')}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="all">All Locations</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-            </select>
-          </div>
+        {/* Price Filter */}
+        <div className="relative">
+          <Ticket className="absolute left-3 top-1/2 h-4 w-4 text-gray-500 -translate-y-1/2" />
+          <select
+            value={selectedPrice}
+            onChange={(e) =>
+              setSelectedPrice(e.target.value as "all" | "free" | "paid")
+            }
+            className="pl-9 pr-8 py-2.5 bg-white rounded-lg text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer"
+          >
+            <option value="all">Any Price</option>
+            <option value="free">Free</option>
+            <option value="paid">Paid</option>
+          </select>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-        {/* Trending Section */}
-        {trendingEvents.length > 0 && (
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-              <TrendingUp className="h-6 w-6 mr-2 text-red-600" />
-              Trending Events
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {trendingEvents.map(event => (
-                <EventCard key={event.id} event={event} isTrending />
+      {/* Events Grid */}
+      <div className="space-y-6">
+        {paginatedEvents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Search className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">No events found</h3>
+            <p className="text-gray-500 text-sm">
+              Try adjusting your search or filters to find what you're looking
+              for.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
               ))}
             </div>
-          </section>
-        )}
 
-        {/* Events Grid */}
-        <section>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">All Events</h2>
-          {paginatedEvents.length === 0 ? (
-            <div className="text-center py-12">
-              <Search className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
-              <p className="text-sm text-gray-500">Try adjusting your filters or search.</p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {paginatedEvents.map(event => (
-                  <EventCard key={event.id} event={event} />
-                ))}
-              </div>
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center space-x-2">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-50"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center space-x-2 pt-8">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:hover:text-gray-400 transition-colors"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`px-3 py-2 rounded-md text-sm font-medium ${
+                      className={`h-8 w-8 rounded-lg text-sm font-bold transition-all ${
                         currentPage === page
-                          ? 'bg-red-600 text-white'
-                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          ? "bg-red-600 text-white"
+                          : "bg-white text-gray-600 hover:bg-red-50 hover:text-red-600"
                       }`}
                     >
                       {page}
                     </button>
-                  ))}
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-50"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                  )
+                )}
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:hover:text-gray-400 transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-interface EventCardProps {
-  event: Event;
-  isTrending?: boolean;
-}
+/* ================= SUB-COMPONENTS ================= */
 
-function EventCard({ event, isTrending = false }: EventCardProps) {
+function EventCard({ event }: { event: Event }) {
   const formatPrice = (price: number | null) => {
-    if (price === null) return 'Free';
+    if (!price || price === 0) return "Free";
     return `₹${price}`;
   };
 
+  const eventDate = new Date(event.date);
+
   return (
-    <a href={`/events/${event.id}`} className="group block">
-      <div className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
-        <div className="relative h-48 bg-gray-200">
-          <img
-            src={event.banner || '/default-banner.jpg'}
-            alt={event.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-          />
-          {isTrending && (
-            <div className="absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded-full text-xs font-medium">
-              <Star className="h-3 w-3 inline mr-1" />
-              Trending
-            </div>
-          )}
+    <Link
+      href={`/events/${
+        event.slug || event.name.toLowerCase().replace(/ /g, "-")
+      }--${event.id}`}
+      className="group block bg-white rounded-lg overflow-hidden hover:bg-gray-50 transition-colors"
+    >
+      <div className="relative h-48 w-full bg-gray-200 overflow-hidden rounded-lg mb-4">
+        <Image
+          src={event.posterUrl || "/default-event-thumb.jpg"}
+          alt={event.name}
+          fill
+          className="object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+        {/* Date Badge */}
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1 text-center shadow-sm">
+          <span className="block text-xs font-bold text-red-600 uppercase">
+            {eventDate.toLocaleString("default", { month: "short" })}
+          </span>
+          <span className="block text-lg font-black text-gray-900 leading-none">
+            {eventDate.getDate()}
+          </span>
         </div>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-              {event.category}
-            </span>
-            <span className="text-sm text-gray-500">
-              {event.locationType === 'online' ? <Globe className="h-3 w-3 inline mr-1" /> : <MapPin className="h-3 w-3 inline mr-1" />}
-              {event.locationType}
-            </span>
+      </div>
+
+      <div className="space-y-3 px-1">
+        <div className="flex items-center justify-between">
+          <span className="inline-block px-2 py-0.5 rounded-md bg-gray-100 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+            {event.category || "General"}
+          </span>
+          <span className="text-lg font-black text-green-600">
+            {formatPrice(event.price)}
+          </span>
+        </div>
+
+        <h3 className="text-xl font-bold text-gray-900 line-clamp-1 group-hover:text-red-600 transition-colors">
+          {event.name}
+        </h3>
+
+        <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="line-clamp-1">{event.location}</span>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-red-600 transition-colors">{event.name}</h3>
-          <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-            <div className="flex items-center space-x-1">
-              <Calendar className="h-4 w-4" />
-              <span>{new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-            </div>
-            <div className="flex items-center space-x-1 font-medium text-gray-900">
-              <Clock className="h-4 w-4" />
-              <span>TBA</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-red-600">{formatPrice(event.price)}</span>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
-              <Ticket className="h-4 w-4" />
-              <span className="text-sm">Get Tickets</span>
-            </button>
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            <span>
+              {eventDate.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           </div>
         </div>
       </div>
-    </a>
+    </Link>
   );
 }

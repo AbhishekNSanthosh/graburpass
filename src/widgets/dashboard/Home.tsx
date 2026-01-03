@@ -80,13 +80,9 @@ export default function Home() {
         ...d.data(),
       })) as Event[];
 
-      const upcoming = events.filter(
-        (e) => new Date(e.date).getTime() >= now
-      );
+      const upcoming = events.filter((e) => new Date(e.date).getTime() >= now);
 
-      const past = events.filter(
-        (e) => new Date(e.date).getTime() < now
-      );
+      const past = events.filter((e) => new Date(e.date).getTime() < now);
 
       const nextEvent = upcoming.sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -99,13 +95,12 @@ export default function Home() {
 
       /* -------- BOOKINGS -------- */
       const bookingsSnap = await getDocs(
-        query(
-          collection(db, "bookings"),
-          where("userEmail", "==", user.email)
-        )
+        query(collection(db, "bookings"), where("userEmail", "==", user.email))
       );
 
-      const bookings: Booking[] = bookingsSnap.docs.map((d) => d.data()) as Booking[];
+      const bookings: Booking[] = bookingsSnap.docs.map((d) =>
+        d.data()
+      ) as Booking[];
 
       setDashboard({
         nextEvent,
@@ -127,8 +122,20 @@ export default function Home() {
 
   if (loading || !dashboard) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading dashboard...
+      <div className="min-h-screen bg-gray-50/50 p-6 space-y-8">
+        <div className="h-32 bg-white rounded-lg border border-gray-100 animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          {[...Array(5)].map((_, i) => (
+            <div
+              key={i}
+              className="h-32 bg-white rounded-lg border border-gray-100 animate-pulse"
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-64 bg-white rounded-lg border border-gray-100 animate-pulse" />
+          <div className="h-64 bg-white rounded-lg border border-gray-100 animate-pulse" />
+        </div>
       </div>
     );
   }
@@ -154,7 +161,7 @@ export default function Home() {
       value: String(dashboard.upcomingCount),
       subtitle: "Scheduled",
       icon: Clock,
-      href: "/events/upcoming",
+      href: "/dashboard/attendee/explore-events",
       bgColor: "bg-gradient-to-br from-blue-400 to-blue-600",
       textColor: "text-white",
     },
@@ -163,7 +170,7 @@ export default function Home() {
       value: String(dashboard.pastCount),
       subtitle: "Completed",
       icon: History,
-      href: "/events/past",
+      href: "/dashboard/attendee/my-bookings",
       bgColor: "bg-gradient-to-br from-purple-400 to-purple-600",
       textColor: "text-white",
     },
@@ -176,7 +183,7 @@ export default function Home() {
           value: String(dashboard.activeEvents),
           subtitle: "Live / Upcoming",
           icon: Ticket,
-          href: "/organizer/manage-events",
+          href: "/dashboard/organizer/manage-events",
           bgColor: "bg-gradient-to-br from-green-400 to-green-600",
           textColor: "text-white",
         },
@@ -185,7 +192,7 @@ export default function Home() {
           value: String(dashboard.ticketsSold),
           subtitle: "Across your events",
           icon: BarChart3,
-          href: "/organizer/analytics",
+          href: "/dashboard/organizer/manage-events",
           bgColor: "bg-gradient-to-br from-indigo-400 to-indigo-600",
           textColor: "text-white",
         },
@@ -198,7 +205,7 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 space-y-8">
       {/* Welcome */}
       {showWelcome && (
-        <div className="relative bg-white rounded-xl p-6  border border-gray-200">
+        <div className="relative bg-white rounded-lg p-6  border border-gray-200">
           <button
             onClick={() => setShowWelcome(false)}
             className="absolute top-4 right-4 text-gray-400"
@@ -267,10 +274,20 @@ export default function Home() {
 /* ================= SHARED COMPONENTS ================= */
 /* (unchanged — exactly as your originals) */
 
-function SummaryCard({ title, value, subtitle, icon: Icon, href, bgColor, textColor }: any) {
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  href,
+  bgColor,
+  textColor,
+}: any) {
   const content = (
     <div className="relative">
-      <div className={`absolute -top-4 -right-4 w-24 h-24 ${bgColor} opacity-10 rotate-12`} />
+      <div
+        className={`absolute -top-4 -right-4 w-24 h-24 ${bgColor} opacity-10 rotate-12`}
+      />
       <div className="relative z-10 flex justify-between">
         <div>
           <p className="text-sm text-gray-500">{title}</p>
@@ -285,39 +302,63 @@ function SummaryCard({ title, value, subtitle, icon: Icon, href, bgColor, textCo
   );
 
   return href ? (
-    <a href={href} className="block bg-white p-6 rounded-xl  border border-gray-200 hover:shadow-lg">
+    <a
+      href={href}
+      className="block bg-white p-6 rounded-lg border border-gray-200"
+    >
       {content}
     </a>
   ) : (
-    <div className="bg-white p-6 rounded-xl  border border-gray-200">{content}</div>
+    <div className="bg-white p-6 rounded-lg border border-gray-200">
+      {content}
+    </div>
   );
 }
 
+/* ================= REDESIGNED ACTIVITY CARD ================= */
+
 function ActivityCard({ title, icon: Icon, children }: any) {
   return (
-    <div className="bg-white p-6 rounded-xl  border border-gray-200">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="bg-red-100 p-2 rounded-lg">
-          <Icon className="h-5 w-5 text-red-600" />
-        </div>
-        <h3 className="font-semibold">{title}</h3>
+    <div className="bg-white p-6 rounded-lg border border-gray-100 relative overflow-hidden group">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-500">
+        <Icon className="w-24 h-24" />
       </div>
-      <div className="space-y-4">{children}</div>
+
+      <div className="flex items-center gap-3 mb-6 relative z-10">
+        <div className="bg-primary/5 p-2.5 rounded-lg border border-primary/10">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
+        <h3 className="font-bold text-lg text-gray-900 tracking-tight">
+          {title}
+        </h3>
+      </div>
+      <div className="space-y-3 relative z-10">{children}</div>
     </div>
   );
 }
 
 function ActivityItem({ title, subtitle, status }: any) {
   return (
-    <div className="flex justify-between p-4 bg-gray-50 rounded-lg">
-      <div>
-        <p className="font-medium">{title}</p>
-        <p className="text-xs text-gray-500 flex items-center gap-1">
-          <MapPin className="h-3 w-3" /> {subtitle}
+    <div className="flex items-start justify-between p-4 bg-gray-50/50 hover:bg-gray-50 border border-gray-100 rounded-lg transition-colors group/item">
+      <div className="space-y-1">
+        <p className="font-bold text-gray-800 text-sm group-hover/item:text-primary transition-colors line-clamp-1">
+          {title}
+        </p>
+        <p className="text-xs text-gray-500 font-medium flex items-center gap-1.5">
+          <span className="w-1 h-1 rounded-full bg-gray-300" />
+          {subtitle}
         </p>
       </div>
       {status && (
-        <span className="text-xs px-2 py-1 rounded-full bg-gray-200">
+        <span
+          className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border ${
+            status.toLowerCase() === "live" ||
+            status.toLowerCase() === "confirmed"
+              ? "bg-green-50 text-green-600 border-green-100"
+              : "bg-amber-50 text-amber-600 border-amber-100"
+          }`}
+        >
           {status}
         </span>
       )}
@@ -330,15 +371,39 @@ function QuickActions({ userView }: { userView?: boolean }) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {userView ? (
         <>
-          <ActionButton title="Browse Events" href="/events" icon={CalendarDays} />
-          <ActionButton title="My Bookings" href="/bookings" icon={Ticket} />
-          <ActionButton title="My Network" href="/network" icon={Users} />
+          <ActionButton
+            title="Browse Events"
+            href="/dashboard/attendee/explore-events"
+            icon={CalendarDays}
+          />
+          <ActionButton
+            title="My Bookings"
+            href="/dashboard/attendee/my-bookings"
+            icon={Ticket}
+          />
+          <ActionButton
+            title="My Profile"
+            href="/dashboard/profile"
+            icon={Users}
+          />
         </>
       ) : (
         <>
-          <ActionButton title="Create Event" href="/organizer/create" icon={Ticket} />
-          <ActionButton title="View Analytics" href="/organizer/analytics" icon={BarChart3} />
-          <ActionButton title="Promote Event" href="/organizer/promote" icon={TrendingUp} />
+          <ActionButton
+            title="Create Event"
+            href="/dashboard/organizer/new-event"
+            icon={Ticket}
+          />
+          <ActionButton
+            title="Manage Events"
+            href="/dashboard/organizer/manage-events"
+            icon={BarChart3}
+          />
+          <ActionButton
+            title="My Profile"
+            href="/dashboard/profile"
+            icon={TrendingUp}
+          />
         </>
       )}
     </div>
@@ -347,7 +412,10 @@ function QuickActions({ userView }: { userView?: boolean }) {
 
 function ActionButton({ title, href, icon: Icon }: any) {
   return (
-    <a href={href} className="bg-white p-6 rounded-xl  border border-gray-200 text-center hover:shadow-lg">
+    <a
+      href={href}
+      className="bg-white p-6 rounded-lg border border-gray-200 text-center"
+    >
       <div className="w-12 h-12 bg-red-100 rounded-lg mx-auto flex items-center justify-center mb-4">
         <Icon className="h-6 w-6 text-red-600" />
       </div>

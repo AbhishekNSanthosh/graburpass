@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/utils/configs/firebaseConfig";
+import { getAuth } from "firebase/auth";
 import toast from "react-hot-toast";
 import {
   Loader2,
@@ -61,6 +62,7 @@ interface EventData {
   posterUrl?: string;
   registrationFields: RegistrationField[];
   ticketTypes: TicketType[];
+  registrationOpen?: boolean;
 }
 
 export default function EventBookingWrapper() {
@@ -121,6 +123,13 @@ export default function EventBookingWrapper() {
           ticketTypes: data.ticketTypes || [],
         });
 
+        // 🛑 Check Registration Status
+        if (data.registrationOpen === false) {
+          toast.error("Registration is closed for this event");
+          router.push(`/events/${slugId}`);
+          return;
+        }
+
         // Default to first ticket type if available
         if (data.ticketTypes && data.ticketTypes.length > 0) {
           const paramIdx = searchParams?.get("ticketIdx");
@@ -170,6 +179,77 @@ export default function EventBookingWrapper() {
 
   const handleInputChange = (fieldId: string, value: any) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleFreeBooking = async () => {
+    if (!isFormValid) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      const orderId = `ORDER_FREE_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(7)}`;
+
+      // Heurestics to find customer details from form data
+      const findVal = (keys: string[]) => {
+        const key = Object.keys(formData).find((k) =>
+          keys.some((search) => k.toLowerCase().includes(search))
+        );
+        console.log(
+          `Searching for ${keys.join(",")}: found key ${key}, value ${
+            key ? formData[key] : "null"
+          }`
+        );
+        return key ? formData[key] : null;
+      };
+
+      const customerName =
+        findVal(["name", "full name", "fullname"])?.toString() ||
+        user?.displayName ||
+        "Guest";
+      const customerEmail =
+        findVal(["email", "e-mail"])?.toString() ||
+        user?.email ||
+        "guest@example.com";
+      const customerPhone =
+        findVal(["phone", "mobile", "contact"])?.toString() || "9999999999";
+
+      const orderData = {
+        orderId,
+        amount: 0,
+        baseAmount: 0,
+        currency: "INR",
+        status: "SUCCESS", // Auto-success for free events
+        customerId: user?.uid || `guest_${Date.now()}`,
+        customerName,
+        customerEmail,
+        customerPhone,
+        eventName: event?.name || "Event Ticket",
+        eventId: event?.id || null,
+        ticketType:
+          event?.ticketTypes?.[selectedTicketIndex]?.name || "Standard",
+        ticketQuantity,
+        metaData: {
+          registrationData: formData,
+        },
+        createdAt: new Date().toISOString(),
+        paymentId: "FREE_ENTRY",
+      };
+
+      await setDoc(doc(db, "orders", orderId), orderData);
+
+      toast.success("Registration Successful!");
+      router.push(`/payment/status?order_id=${orderId}`);
+    } catch (error) {
+      console.error("Free booking failed:", error);
+      toast.error("Booking failed. Please try again.");
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -510,19 +590,40 @@ export default function EventBookingWrapper() {
             </div>
           </div>
           <div className="w-40 sm:w-64">
-            <PaymentButton
-              amount={finalAmount}
-              eventId={eventId || ""}
-              eventName={event.name}
-              bookingData={{
-                registrationData: formData,
-                ticketType: event.ticketTypes?.[selectedTicketIndex],
-                ticketQuantity: ticketQuantity,
-                paymentBreakdown, // Pass breakdown for backend/logging if needed
-              }}
-              guestMode={true}
-              disabled={!isFormValid}
-            />
+            {searchParams?.get("preview") === "true" ? (
+              <button
+                disabled
+                className="w-full bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed"
+              >
+                Preview Mode
+              </button>
+            ) : finalAmount === 0 ? (
+              <button
+                onClick={handleFreeBooking}
+                disabled={!isFormValid || loading}
+                className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition-all shadow-lg hover:shadow-green-600/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>Register for Free</>
+                )}
+              </button>
+            ) : (
+              <PaymentButton
+                amount={finalAmount}
+                eventId={eventId || ""}
+                eventName={event.name}
+                bookingData={{
+                  registrationData: formData,
+                  ticketType: event.ticketTypes?.[selectedTicketIndex],
+                  ticketQuantity: ticketQuantity,
+                  paymentBreakdown, // Pass breakdown for backend/logging if needed
+                }}
+                guestMode={true}
+                disabled={!isFormValid}
+              />
+            )}
           </div>
         </div>
       </div>

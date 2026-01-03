@@ -20,6 +20,10 @@ function StatusContent() {
   );
   const [message, setMessage] = useState("Verifying your payment...");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [redirectLink, setRedirectLink] = useState<string | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
+    null
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -78,6 +82,59 @@ function StatusContent() {
     verifyPayment();
   }, [orderId]);
 
+  // Fetch Event Details (for WhatsApp Link) when status is SUCCESS
+  useEffect(() => {
+    if (status === "SUCCESS" && orderId) {
+      const fetchEventDetails = async () => {
+        try {
+          const { doc, getDoc } = await import("firebase/firestore");
+          const { db } = await import("@/utils/configs/firebaseConfig");
+
+          const orderRef = doc(db, "orders", orderId);
+          const orderSnap = await getDoc(orderRef);
+          if (orderSnap.exists()) {
+            const orderData = orderSnap.data();
+            if (orderData.eventId) {
+              const eventRef = doc(db, "published_events", orderData.eventId);
+              const eventSnap = await getDoc(eventRef);
+              if (eventSnap.exists()) {
+                const eventData = eventSnap.data();
+                if (eventData) {
+                  const link = eventData.redirectUrl || eventData.whatsappLink;
+                  if (link) {
+                    setRedirectLink(link);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch redirect link", e);
+        }
+      };
+      fetchEventDetails();
+    }
+  }, [status, orderId]);
+
+  // Handle Auto-Redirect Countdown
+  useEffect(() => {
+    if (redirectLink) {
+      setRedirectCountdown(3); // Start 3s countdown
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev === null) return null;
+          if (prev <= 1) {
+            clearInterval(timer);
+            window.location.href = redirectLink;
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [redirectLink]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col selection:bg-primary/10">
       <PublicHeader />
@@ -105,6 +162,44 @@ function StatusContent() {
                 Your ticket has been booked successfully. You will receive a
                 confirmation email shortly.
               </p>
+
+              {redirectLink && (
+                <div className="w-full mb-3">
+                  {redirectCountdown !== null && redirectCountdown > 0 ? (
+                    <div className="mb-4 p-4 bg-green-50 rounded-xl border border-green-100 flex flex-col items-center animate-pulse">
+                      <div className="flex items-center gap-2 text-green-700 font-bold mb-1">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Redirecting you in {redirectCountdown}s...
+                      </div>
+                      <p className="text-xs text-green-600">
+                        Please wait while we take you to the group/link.
+                      </p>
+                      <button
+                        onClick={() => setRedirectCountdown(null)}
+                        className="text-xs text-green-700 underline mt-2 hover:text-green-800"
+                      >
+                        Cancel Auto-Redirect
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <a
+                    href={redirectLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-green-500 text-white font-bold py-3.5 rounded-xl hover:bg-green-600 transition-all shadow-lg shadow-green-500/20 hover:shadow-500/30 flex items-center justify-center gap-2"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-5 h-5 fill-current"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                    </svg>
+                    Continue to Event / Group
+                  </a>
+                </div>
+              )}
 
               <div className="flex flex-col w-full gap-3">
                 {isLoggedIn ? (

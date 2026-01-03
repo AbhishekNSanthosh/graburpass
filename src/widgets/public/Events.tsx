@@ -23,6 +23,7 @@ interface PublicEvent {
   slug?: string;
   price?: number; // Added price
   shareUrl?: string;
+  registrationOpen?: boolean;
 }
 
 /* ================= COMPONENT ================= */
@@ -72,6 +73,7 @@ export default function Events() {
               attendees: data.attendees ?? 0,
               slug: data.slug,
               price: minPrice,
+              registrationOpen: data.registrationOpen !== false,
             };
           })
           .sort(
@@ -157,10 +159,18 @@ function EventCard({ event }: { event: PublicEvent }) {
   return (
     <Link
       href={eventUrl}
-      className="group block h-full bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 flex flex-col"
+      className={`group block h-full bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 flex flex-col ${
+        event.registrationOpen === false ? "opacity-75 grayscale-[0.5]" : ""
+      }`}
     >
       {/* POSTER */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-100">
+        {/* Registration Closed Overlay */}
+        {event.registrationOpen === false && (
+          <div className="absolute top-3 right-3 z-30 bg-black/70 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide border border-white/20">
+            Registration Closed
+          </div>
+        )}
         {/* Blurred Background Layer */}
         <div className="absolute inset-0">
           <Image
@@ -240,9 +250,15 @@ function EventCard({ event }: { event: PublicEvent }) {
           </div>
 
           {/* Button CTA */}
-          <div className="h-10 w-10 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 flex items-center justify-center text-gray-900 dark:text-white group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-300 shadow-sm">
-            <ArrowRight className="w-5 h-5 -rotate-45 group-hover:rotate-0 transition-transform duration-300" />
-          </div>
+          {event.registrationOpen === false ? (
+            <div className="h-8 px-3 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 uppercase tracking-wide border border-gray-200">
+              Closed
+            </div>
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 flex items-center justify-center text-gray-900 dark:text-white group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-300 shadow-sm">
+              <ArrowRight className="w-5 h-5 -rotate-45 group-hover:rotate-0 transition-transform duration-300" />
+            </div>
+          )}
         </div>
       </div>
     </Link>
