@@ -89,17 +89,6 @@ export default function Events() {
     fetchEvents();
   }, []);
 
-  if (loading) {
-    return (
-      <section className="min-h-[60vh] flex justify-center items-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin border-b-2 border-primary rounded-full" />
-          <p className="text-muted text-sm">Loading events...</p>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="px-[5vw] py-32 bg-background min-h-screen">
       {/* Background decorations */}
@@ -119,7 +108,13 @@ export default function Events() {
         </p>
       </div>
 
-      {events.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[...Array(8)].map((_, index) => (
+            <SkeletonCard key={index} />
+          ))}
+        </div>
+      ) : events.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-black/5 rounded-3xl bg-surface-1/50 animate-fade-in-up">
           <Calendar className="w-16 h-16 text-muted/30 mb-4" />
           <h3 className="text-lg font-bold text-foreground mb-2">
@@ -148,83 +143,126 @@ export default function Events() {
 
 /* ================= EVENT CARD ================= */
 function EventCard({ event }: { event: PublicEvent }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
   const eventUrl = `/events/${event.slug || event.id}`;
   const dateObj = new Date(event.date);
-  const day = dateObj.getDate();
-  const month = dateObj.toLocaleString("default", { month: "short" });
+
+  // Format Date: "Sat, Jan 3"
+  const dateStr = dateObj.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 
   return (
     <Link
       href={eventUrl}
-      className="group block h-full bg-white dark:bg-[#111] border border-black/5 dark:border-white/10 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px] hover:border-black/10 flex flex-col"
+      className="group block h-full bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 flex flex-col"
     >
       {/* POSTER */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-surface-2">
-        {/* Date Badge (Overlay) */}
-        <div className="absolute top-3 left-3 z-10 flex flex-col items-center justify-center w-10 h-12 bg-white/95 dark:bg-black/90 backdrop-blur-md rounded-lg shadow-sm border border-black/5">
-          <span className="text-[9px] uppercase font-bold text-red-500 tracking-wider">
-            {month}
-          </span>
-          <span className="text-base font-black text-foreground leading-none mt-0.5">
-            {day}
-          </span>
-        </div>
-
-        {/* Image */}
-        <div className="relative w-full h-full">
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-100">
+        {/* Blurred Background Layer */}
+        <div className="absolute inset-0">
           <Image
             src={
               event.posterUrl ||
               "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop"
-            } // Fallback image
-            alt={event.name}
+            }
+            alt=""
             fill
-            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            className="object-cover blur-sm scale-110 opacity-100 placeholder-blur"
           />
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90" />
-
-        {/* Price Tag Overlay */}
-        <div className="absolute bottom-3 right-3">
-          <div
-            className={`px-3 py-1.5 backdrop-blur-md text-xs font-bold rounded-lg border shadow-lg ${
-              event.price && event.price > 0
-                ? "bg-white/90 text-black border-white/20"
-                : "bg-green-500/90 text-white border-green-400/20"
+        {/* Main Image Layer */}
+        <div className="relative w-full h-full z-10 p-2">
+          {!imageLoaded && (
+            <div className="absolute inset-0 bg-gray-200 dark:bg-gray-800 animate-pulse z-20" />
+          )}
+          <Image
+            src={
+              event.posterUrl ||
+              "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop"
+            }
+            alt={event.name}
+            fill
+            onLoadingComplete={() => setImageLoaded(true)}
+            className={`object-contain transition-all duration-700 group-hover:scale-105 drop-shadow-xl ${
+              imageLoaded ? "opacity-100 blur-0" : "opacity-0 blur-lg"
             }`}
-          >
-            {event.price && event.price > 0 ? `₹${event.price}` : "Free"}
-          </div>
+          />
         </div>
+
+        {/* Overlay Gradient for text readability if needed, though we moved text out */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
       {/* CONTENT */}
-      <div className="p-4 flex flex-col flex-1">
-        <div className="flex-1 space-y-2">
-          <h3 className="text-base font-bold text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+      <div className="p-5 flex flex-col flex-1">
+        <div className="flex-1 space-y-3">
+          {/* Title */}
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight group-hover:text-primary transition-colors">
             {event.name}
           </h3>
 
-          <div className="flex items-start gap-1.5 text-xs text-muted">
-            <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span className="line-clamp-1">{event.location}</span>
+          {/* Metadata */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <Calendar className="w-4 h-4 shrink-0 stroke-[1.5]" />
+              <span className="font-medium">{dateStr}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <MapPin className="w-4 h-4 shrink-0 stroke-[1.5]" />
+              <span className="line-clamp-1">{event.location}</span>
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="pt-4 mt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
-            <Users className="w-3.5 h-3.5" />
-            <span>{event.attendees} going</span>
+        {/* Footer / Action */}
+        <div className="pt-5 mt-5 border-t border-gray-100 dark:border-white/5 flex items-end justify-between">
+          {/* Price */}
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+              Starting from
+            </span>
+            <div className="flex items-baseline gap-1">
+              {event.price && event.price > 0 ? (
+                <>
+                  <span className="text-xl font-bold text-gray-900 dark:text-white">
+                    ₹{event.price}{" "}
+                    <span className="text-sm font-medium">onwards</span>
+                  </span>
+                </>
+              ) : (
+                <span className="text-lg font-bold text-green-600">Free</span>
+              )}
+            </div>
           </div>
 
-          <span className="inline-flex items-center gap-1 text-xs font-bold text-foreground group-hover:underline">
-            Details{" "}
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-          </span>
+          {/* Button CTA */}
+          <div className="h-10 w-10 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 flex items-center justify-center text-gray-900 dark:text-white group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-300 shadow-sm">
+            <ArrowRight className="w-5 h-5 -rotate-45 group-hover:rotate-0 transition-transform duration-300" />
+          </div>
         </div>
       </div>
     </Link>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="h-full bg-white dark:bg-[#111] border border-black/5 dark:border-white/10 rounded-xl overflow-hidden flex flex-col">
+      <div className="relative aspect-[3/4] w-full bg-gray-200 dark:bg-gray-800 animate-pulse" />
+      <div className="p-4 flex flex-col flex-1 space-y-4">
+        <div className="space-y-2">
+          <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-3/4 animate-pulse" />
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/2 animate-pulse" />
+        </div>
+        <div className="pt-4 mt-auto border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/3 animate-pulse" />
+          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4 animate-pulse" />
+        </div>
+      </div>
+    </div>
   );
 }

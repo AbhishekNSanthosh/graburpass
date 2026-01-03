@@ -184,17 +184,14 @@ export default function PublicEventPage() {
         <div className="px-[5vw] py-8">
           <div className="bg-white rounded-md p-6 md:p-10 border border-gray-100 grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
             {/* Left Column: Visuals (Dynamic Tint) */}
-            <div
-              className="relative h-[400px] lg:col-span-2 rounded-[10px] overflow-hidden border border-gray-200 shadow-md bg-black"
-              style={{ background: bgStyle }}
-            >
+            <div className="relative h-[400px] lg:col-span-2 rounded-[10px] overflow-hidden border border-gray-200 shadow-md bg-gray-100">
               {/* Blurred background */}
               <div className="absolute inset-0">
                 <Image
                   src={event.posterUrl}
                   alt="Background"
                   fill
-                  className="object-cover blur-3xl scale-125 opacity-40"
+                  className="object-cover blur-sm scale-110 opacity-100"
                 />
               </div>
 
@@ -210,7 +207,7 @@ export default function PublicEventPage() {
                   crossOrigin="anonymous"
                 />
               </div>
-              <div className="inline-flex absolute top-4 left-4 items-center px-4 py-1.5 rounded-full bg-red-50 text-red-700 text-sm font-bold uppercase tracking-wide">
+              <div className="inline-flex blur-xl absolute top-4 left-4 items-center px-4 py-1.5 rounded-full bg-red-50 text-red-700 text-sm font-bold uppercase tracking-wide">
                 {event.category || "Event"}
               </div>
             </div>
