@@ -21,9 +21,10 @@ interface PublicEvent {
   posterUrl?: string;
   attendees?: number;
   slug?: string;
-  price?: number; // Added price
+  price?: number;
   shareUrl?: string;
   registrationOpen?: boolean;
+  ticketSalesStart?: string | null; // Added
 }
 
 /* ================= COMPONENT ================= */
@@ -51,8 +52,10 @@ export default function Events() {
                 ? data.date
                 : new Date().toISOString().split("T")[0];
 
-            // Determine price from ticketTypes
+            // Determine price and earliest sale start from ticketTypes
             let minPrice = 0;
+            let earliestSaleStart: Date | null = null;
+
             if (
               data.ticketTypes &&
               Array.isArray(data.ticketTypes) &&
@@ -62,6 +65,23 @@ export default function Events() {
                 (t: any) => Number(t.price) || 0
               );
               minPrice = Math.min(...prices);
+
+              // Find earliest sale start logic
+              data.ticketTypes.forEach((t: any) => {
+                const rawStart = t.saleStartDate || t.salesStartDate;
+                let start: Date | null = null;
+                if (rawStart?.toDate) {
+                  start = rawStart.toDate();
+                } else if (rawStart) {
+                  start = new Date(rawStart);
+                }
+
+                if (start && !isNaN(start.getTime())) {
+                  if (!earliestSaleStart || start < earliestSaleStart) {
+                    earliestSaleStart = start;
+                  }
+                }
+              });
             }
 
             return {
@@ -74,6 +94,9 @@ export default function Events() {
               slug: data.slug,
               price: minPrice,
               registrationOpen: data.registrationOpen !== false,
+              ticketSalesStart: earliestSaleStart
+                ? (earliestSaleStart as Date).toISOString()
+                : null,
             };
           })
           .sort(
@@ -156,21 +179,54 @@ function EventCard({ event }: { event: PublicEvent }) {
     day: "numeric",
   });
 
+  // Calculate Status
+  const now = new Date();
+  let isUpcoming = false;
+  let statusBadge = null;
+
+  if (event.ticketSalesStart) {
+    const start = new Date(event.ticketSalesStart);
+    if (start > now) {
+      isUpcoming = true;
+      const formattedStart = `${start.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+      })}, ${start.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })}`;
+      statusBadge = (
+        <div className="absolute top-3 right-3 z-30 bg-blue-600/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide border border-white/20 shadow-lg">
+          Starts {formattedStart}
+        </div>
+      );
+    }
+  }
+
+  // Fallback to "Closed" if not upcoming and registration explicitly closed
+  if (!isUpcoming && event.registrationOpen === false) {
+    statusBadge = (
+      <div className="absolute top-3 right-3 z-30 bg-black/70 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide border border-white/20">
+        Registration Closed
+      </div>
+    );
+  }
+
   return (
     <Link
       href={eventUrl}
       className={`group block h-full bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 flex flex-col ${
-        event.registrationOpen === false ? "opacity-75 grayscale-[0.5]" : ""
+        !isUpcoming && event.registrationOpen === false
+          ? "opacity-75 grayscale-[0.5]"
+          : ""
       }`}
     >
       {/* POSTER */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-100">
-        {/* Registration Closed Overlay */}
-        {event.registrationOpen === false && (
-          <div className="absolute top-3 right-3 z-30 bg-black/70 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide border border-white/20">
-            Registration Closed
-          </div>
-        )}
+        {/* Registration Status Overlay */}
+        {statusBadge}
+
         {/* Blurred Background Layer */}
         <div className="absolute inset-0">
           <Image
@@ -233,7 +289,7 @@ function EventCard({ event }: { event: PublicEvent }) {
           {/* Price */}
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-              Starting from
+              {event.price && event.price > 0 ? "Starting from" : ""}
             </span>
             <div className="flex items-baseline gap-1">
               {event.price && event.price > 0 ? (
@@ -244,19 +300,29 @@ function EventCard({ event }: { event: PublicEvent }) {
                   </span>
                 </>
               ) : (
-                <span className="text-lg font-bold text-green-600">Free</span>
+                <span className="text-xl font-bold text-red-700">Free</span>
               )}
             </div>
           </div>
 
           {/* Button CTA */}
-          {event.registrationOpen === false ? (
+          {!isUpcoming && event.registrationOpen === false ? (
             <div className="h-8 px-3 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 uppercase tracking-wide border border-gray-200">
               Closed
             </div>
           ) : (
-            <div className="h-10 w-10 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 flex items-center justify-center text-gray-900 dark:text-white group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-300 shadow-sm">
-              <ArrowRight className="w-5 h-5 -rotate-45 group-hover:rotate-0 transition-transform duration-300" />
+            <div
+              className={`h-10 w-10 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 flex items-center justify-center text-gray-900 dark:text-white transition-all duration-300 shadow-sm ${
+                isUpcoming
+                  ? "opacity-50 cursor-not-allowed group-hover:bg-gray-100"
+                  : "group-hover:bg-primary group-hover:text-white group-hover:border-primary"
+              }`}
+            >
+              <ArrowRight
+                className={`w-5 h-5 -rotate-45 transition-transform duration-300 ${
+                  !isUpcoming && "group-hover:rotate-0"
+                }`}
+              />
             </div>
           )}
         </div>

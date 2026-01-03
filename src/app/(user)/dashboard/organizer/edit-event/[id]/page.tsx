@@ -47,5 +47,5 @@ export default function EditEventPage() {
 
   // Reuse the NewEvent widget, but we need to tell it we are EDITING a PUBLISHED event.
   // We can pass a prop `editMode="published"` and `editId={id}`.
-  return <NewEvent editId={id} />;
+  return <NewEvent editId={id} editMode="published" />;
 }

@@ -45,8 +45,15 @@ export default function PublicEventPage() {
     null
   );
   const [highlightTickets, setHighlightTickets] = useState(false);
+  const [now, setNow] = useState(new Date());
 
   const imgRef = useRef<HTMLImageElement | null>(null);
+
+  // Update "now" every minute to keep statuses fresh
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ---------------- fetch event ---------------- */
 
@@ -67,7 +74,25 @@ export default function PublicEventPage() {
           return;
         }
 
-        setEvent({ id: snap.id, ...snap.data() });
+        const data = snap.data();
+
+        // Normalize Ticket Dates (handle Timestamps or Strings)
+        const ticketTypes = (data.ticketTypes || []).map((t: any) => {
+          const rawStart = t.saleStartDate || t.salesStartDate;
+          const rawEnd = t.saleEndDate || t.salesEndDate;
+
+          return {
+            ...t,
+            saleStartDate: rawStart?.toDate
+              ? rawStart.toDate().toISOString()
+              : rawStart,
+            saleEndDate: rawEnd?.toDate
+              ? rawEnd.toDate().toISOString()
+              : rawEnd,
+          };
+        });
+
+        setEvent({ id: snap.id, ...data, ticketTypes });
       } catch {
         toast.error("Failed to load event");
       } finally {
@@ -103,9 +128,8 @@ export default function PublicEventPage() {
         let topRgb = top.value.slice(0, 3);
         let bottomRgb = bottom.value.slice(0, 3);
 
-        // 🔑 DARK POSTER FIX
         if (isVeryDark(topRgb)) {
-          topRgb = [45, 55, 85]; // navy-blue lift
+          topRgb = [45, 55, 85];
           bottomRgb = [30, 35, 60];
         } else {
           topRgb = lighten(topRgb, 90);
@@ -130,6 +154,59 @@ export default function PublicEventPage() {
     return () => fac.destroy();
   }, [event?.posterUrl]);
 
+  /* ---------------- ticket status logic ---------------- */
+
+  const getTicketStatus = (ticket: any) => {
+    // 1. SOLD OUT check
+    if (Number(ticket.quantity) <= 0) {
+      return { code: "SOLD_OUT", label: "Sold Out", color: "text-red-600" };
+    }
+
+    let start: Date | null = null;
+    if (ticket.saleStartDate) {
+      const d = new Date(ticket.saleStartDate);
+      if (!isNaN(d.getTime())) start = d;
+    }
+
+    let end: Date | null = null;
+    if (ticket.saleEndDate) {
+      const d = new Date(ticket.saleEndDate);
+      if (!isNaN(d.getTime())) end = d;
+    }
+
+    // 2. UPCOMING check
+    if (start && now.getTime() < start.getTime()) {
+      return {
+        code: "UPCOMING",
+        label: `Sales Start: ${start.toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}, ${start.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })}`,
+        color: "text-blue-600",
+      };
+    }
+
+    // 3. ENDED check
+    if (end && now.getTime() >= end.getTime()) {
+      console.log("[TicketStatus] Sales Ended:", {
+        ticketName: ticket.name,
+        now: now.toISOString(),
+        endDate: end.toISOString(),
+        nowTime: now.getTime(),
+        endTime: end.getTime(),
+      });
+      return { code: "ENDED", label: "Sales Ended", color: "text-gray-500" };
+    }
+
+    // 4. AVAILABLE
+    return { code: "AVAILABLE", label: "Available", color: "text-green-600" };
+  };
+
   /* ---------------- loading ---------------- */
 
   if (loading) {
@@ -138,33 +215,11 @@ export default function PublicEventPage() {
         <PublicHeader />
         <main className="flex-grow pt-16 md:pt-20">
           <div className="px-[5vw] py-8 animate-pulse">
-            {/* Hero Skeleton */}
             <div className="bg-white rounded-md p-6 md:p-10 border border-gray-100 grid grid-cols-1 lg:grid-cols-3 gap-12">
               <div className="h-[520px] lg:col-span-2 bg-gray-200 rounded-xl" />
               <div className="flex flex-col justify-between h-[520px] py-2">
-                <div>
-                  <div className="h-12 bg-gray-300 rounded-lg w-3/4 mb-6" />
-                  <div className="h-8 bg-gray-200 rounded-full w-24 mb-10" />
-                  <div className="space-y-4">
-                    <div className="h-24 bg-gray-100 rounded-xl border border-gray-200" />
-                    <div className="h-24 bg-gray-100 rounded-xl border border-gray-200" />
-                  </div>
-                </div>
-                <div className="h-16 bg-gray-800 rounded-xl opacity-10" />
+                <div className="h-full bg-gray-100 rounded-xl"></div>
               </div>
-            </div>
-
-            {/* Content Skeleton */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mt-12 pb-16">
-              <div className="lg:col-span-2 h-[400px] bg-white rounded-xl border border-gray-100 p-8">
-                <div className="h-8 w-48 bg-gray-200 rounded-lg mb-6" />
-                <div className="space-y-4">
-                  <div className="h-4 w-full bg-gray-100 rounded" />
-                  <div className="h-4 w-full bg-gray-100 rounded" />
-                  <div className="h-4 w-3/4 bg-gray-100 rounded" />
-                </div>
-              </div>
-              <div className="lg:col-span-1 h-[600px] bg-white rounded-xl border border-gray-100" />
             </div>
           </div>
         </main>
@@ -183,9 +238,8 @@ export default function PublicEventPage() {
         {/* ---------- Hero Section ---------- */}
         <div className="px-[5vw] py-8">
           <div className="bg-white rounded-md p-6 md:p-10 border border-gray-100 grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
-            {/* Left Column: Visuals (Dynamic Tint) */}
+            {/* Left Column: Visuals */}
             <div className="relative h-[400px] lg:col-span-2 rounded-[10px] overflow-hidden border border-gray-200 shadow-md bg-gray-100">
-              {/* Blurred background */}
               <div className="absolute inset-0">
                 <Image
                   src={event.posterUrl}
@@ -195,7 +249,6 @@ export default function PublicEventPage() {
                 />
               </div>
 
-              {/* Main image */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <Image
                   ref={imgRef}
@@ -230,7 +283,27 @@ export default function PublicEventPage() {
                       Date & Time
                     </p>
                     <p className="text-sm text-gray-900 font-semibold">
-                      {event.date} • {event.time}
+                      {(() => {
+                        const dateObj = new Date(event.date);
+                        const formattedDate = dateObj.toLocaleDateString(
+                          "en-GB",
+                          {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          }
+                        );
+
+                        if (!event.time) return formattedDate;
+
+                        const [hours, minutes] = event.time.split(":");
+                        const h = parseInt(hours);
+                        const period = h >= 12 ? "PM" : "AM";
+                        const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                        const formattedTime = `${displayHour}:${minutes} ${period}`;
+
+                        return `${formattedDate} • ${formattedTime}`;
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -315,7 +388,6 @@ export default function PublicEventPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Left Column: Details */}
             <div className="lg:col-span-2 space-y-10">
-              {/* Description */}
               <div className="bg-white rounded-[10px] p-8 border border-gray-100">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
                   <Info className="h-6 w-6 mr-3 text-red-600" />
@@ -326,7 +398,6 @@ export default function PublicEventPage() {
                 </div>
               </div>
 
-              {/* Venue Map (Offline only) */}
               {event.locationType === "offline" && event.venueAddress && (
                 <div className="bg-white rounded-[10px] p-8 border border-gray-100 ">
                   <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
@@ -368,47 +439,67 @@ export default function PublicEventPage() {
                   </h3>
 
                   <div className="space-y-4">
-                    {event.ticketTypes?.map((ticket: any, idx: number) => (
-                      <div
-                        key={idx}
-                        onClick={() => setSelectedTicketIndex(idx)}
-                        className={`p-4 border rounded-2xl transition-all cursor-pointer group ${
-                          selectedTicketIndex === idx
-                            ? "border-red-600 bg-red-50 shadow-sm"
-                            : "border-gray-200 hover:border-red-500 hover:bg-red-50/50"
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span
-                            className={`font-bold group-hover:text-red-700 ${
-                              selectedTicketIndex === idx
-                                ? "text-red-700"
-                                : "text-gray-900"
-                            }`}
-                          >
-                            {ticket.name}
-                          </span>
-                          <span
-                            className={`font-bold text-lg px-3 py-1 rounded-full ${
-                              selectedTicketIndex === idx
-                                ? "bg-red-100 text-red-700"
-                                : "bg-red-50 text-red-600"
-                            }`}
-                          >
-                            {ticket.price ? `₹${ticket.price}` : "Free"}
-                          </span>
+                    {event.ticketTypes?.map((ticket: any, idx: number) => {
+                      const status = getTicketStatus(ticket);
+                      const isAvailable = status.code === "AVAILABLE";
+                      const isSelected = selectedTicketIndex === idx;
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (isAvailable) setSelectedTicketIndex(idx);
+                          }}
+                          className={`p-4 border rounded-2xl transition-all cursor-pointer group ${
+                            isSelected
+                              ? "border-red-600 bg-red-50 shadow-sm"
+                              : isAvailable
+                              ? "border-gray-200 hover:border-red-500 hover:bg-red-50/50"
+                              : "border-gray-100 bg-gray-50 opacity-80 cursor-not-allowed"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span
+                              className={`font-bold ${
+                                isSelected
+                                  ? "text-red-700"
+                                  : isAvailable
+                                  ? "group-hover:text-red-700 text-gray-900"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {ticket.name}
+                            </span>
+                            <span
+                              className={`font-bold text-lg px-3 py-1 rounded-full ${
+                                isSelected
+                                  ? "bg-red-100 text-red-700"
+                                  : isAvailable
+                                  ? "bg-red-50 text-red-600"
+                                  : "bg-gray-100 text-gray-400"
+                              }`}
+                            >
+                              {Number(ticket.price) > 0
+                                ? `₹${ticket.price}`
+                                : "Free"}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 flex justify-between px-1">
+                            <span
+                              className={`flex items-center font-medium ${status.color}`}
+                            >
+                              {status.code === "AVAILABLE" && (
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                              )}
+                              {status.label}
+                            </span>
+                            {isSelected && (
+                              <CheckCircle2 className="h-4 w-4 text-red-600" />
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500 flex justify-between px-1">
-                          <span className="flex items-center">
-                            <CheckCircle2 className="h-3 w-3 mr-1 text-green-500" />
-                            {ticket.quantity > 0 ? "Available" : "Sold Out"}
-                          </span>
-                          {selectedTicketIndex === idx && (
-                            <CheckCircle2 className="h-4 w-4 text-red-600" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <button
                       onClick={() => {
@@ -453,7 +544,7 @@ export default function PublicEventPage() {
                   </div>
                 </div>
 
-                {/* Share Card */}
+                {/* Share Card and Organizer Card... */}
                 <div className="bg-white rounded-[10px] p-6 border border-gray-100 flex items-center justify-between">
                   <div>
                     <h4 className="font-semibold text-gray-900 text-sm">
@@ -472,7 +563,6 @@ export default function PublicEventPage() {
                   </button>
                 </div>
 
-                {/* Organizer Details (Sidebar) */}
                 {event.organizerName && (
                   <div className="bg-white rounded-[10px] p-6 border border-gray-100">
                     <h4 className="font-semibold text-gray-900 text-sm mb-4 flex items-center uppercase tracking-wider">
@@ -487,7 +577,6 @@ export default function PublicEventPage() {
                         <h3 className="font-bold text-sm text-gray-900">
                           {event.organizerName}
                         </h3>
-                        {/* Short bio if in sidebar, or truncated */}
                       </div>
                     </div>
                     {event.organizerDescription && (

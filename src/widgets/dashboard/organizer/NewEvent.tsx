@@ -17,6 +17,7 @@ import {
   ChevronRight,
   User,
   Copy,
+  Pencil,
 } from "lucide-react";
 import {
   addDoc,
@@ -34,7 +35,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getAuth } from "firebase/auth";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import "react-datepicker/dist/react-datepicker.css";
+
 import {
   pdf,
   Document,
@@ -63,6 +64,13 @@ type TicketTypeInput = {
   name: string;
   price: number | "";
   quantity: number | "";
+  description?: string;
+  saleStartDate?: string | null;
+  saleEndDate?: string | null;
+  minBookingPerOrder?: number | "";
+  maxBookingPerOrder?: number | "";
+  requireAttendeeDetails?: boolean;
+  enableBulkTicketing?: boolean;
 };
 
 interface RegistrationField {
@@ -94,20 +102,29 @@ interface EventFormData {
   organizerName: string;
   organizerDescription: string;
   termsAccepted: boolean;
-  redirectUrl?: string;
+  registrationStartDate?: string | null;
+  registrationEndDate?: string | null;
+  redirectUrl?: string | null;
 }
 
 interface NewEventProps {
   editId?: string;
+  editMode?: "draft" | "published";
 }
 
-export default function NewEvent({ editId }: NewEventProps) {
+export default function NewEvent({ editId, editMode }: NewEventProps) {
   const [step, setStep] = useState(1);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [expandedTicketIndex, setExpandedTicketIndex] = useState<number | null>(
+    0
+  );
+  const [successActionType, setSuccessActionType] = useState<
+    "create" | "update"
+  >("create");
 
   const [formData, setFormData] = useState<EventFormData>({
     name: "",
@@ -121,7 +138,19 @@ export default function NewEvent({ editId }: NewEventProps) {
     isPaid: false,
     platformFeePayer: "organizer",
     platformFeePercentage: 2,
-    ticketTypes: [{ name: "General", price: "", quantity: "" }],
+    ticketTypes: [
+      {
+        name: "General",
+        price: "",
+        quantity: "",
+        saleStartDate: null,
+        saleEndDate: null,
+        minBookingPerOrder: "",
+        maxBookingPerOrder: "",
+        requireAttendeeDetails: false,
+        enableBulkTicketing: false,
+      },
+    ],
     registrationFields: [
       { id: "firstName", label: "First Name", type: "text", required: true },
       { id: "lastName", label: "Last Name", type: "text", required: true },
@@ -135,6 +164,7 @@ export default function NewEvent({ editId }: NewEventProps) {
     termsAccepted: false,
     redirectUrl: "",
   });
+  console.log(formData);
 
   const auth = getAuth();
   const user = auth.currentUser;
@@ -199,6 +229,8 @@ export default function NewEvent({ editId }: NewEventProps) {
               ticketTypes: data.ticketTypes || prev.ticketTypes,
               registrationFields:
                 data.registrationFields || prev.registrationFields,
+              registrationStartDate: data.registrationStartDate || null,
+              registrationEndDate: data.registrationEndDate || null,
             }));
 
             // Auto-detect orientation if missing
@@ -243,13 +275,41 @@ export default function NewEvent({ editId }: NewEventProps) {
             const fetchedPoster =
               data.posterUrl || data.poster || data.url || null;
 
+            const ticketTypes = (data.ticketTypes || []).map((t: any) => {
+              const rawStart = t.saleStartDate || t.salesStartDate;
+              const rawEnd = t.saleEndDate || t.salesEndDate;
+
+              let start = rawStart;
+              if (rawStart?.toDate) {
+                start = rawStart.toDate().toISOString();
+              }
+
+              let end = rawEnd;
+              if (rawEnd?.toDate) {
+                end = rawEnd.toDate().toISOString();
+              }
+
+              return {
+                ...t,
+                saleStartDate: start || null,
+                saleEndDate: end || null,
+              };
+            });
+
             setFormData((prev) => ({
               ...prev,
               ...(data as EventFormData),
               posterPreview: fetchedPoster,
-              ticketTypes: data.ticketTypes || prev.ticketTypes,
+              ticketTypes:
+                ticketTypes.length > 0 ? ticketTypes : prev.ticketTypes,
               registrationFields:
                 data.registrationFields || prev.registrationFields,
+              registrationStartDate: data.registrationStartDate?.toDate
+                ? data.registrationStartDate.toDate().toISOString()
+                : data.registrationStartDate,
+              registrationEndDate: data.registrationEndDate?.toDate
+                ? data.registrationEndDate.toDate().toISOString()
+                : data.registrationEndDate,
             }));
 
             setPublishedId(editId);
@@ -304,6 +364,7 @@ export default function NewEvent({ editId }: NewEventProps) {
         { name: "New Ticket", price: "", quantity: "" },
       ],
     });
+    setExpandedTicketIndex(formData.ticketTypes.length);
   };
 
   const removeTicketType = (index: number) => {
@@ -441,6 +502,8 @@ export default function NewEvent({ editId }: NewEventProps) {
           organizerDescription: formData.organizerDescription,
           creatorEmail: user?.email,
           updatedAt: serverTimestamp(),
+          registrationStartDate: formData.registrationStartDate || null,
+          registrationEndDate: formData.registrationEndDate || null,
         });
       } else {
         // Calculate detailed ticket stats
@@ -505,6 +568,8 @@ export default function NewEvent({ editId }: NewEventProps) {
           creatorEmail: user?.email,
           status: "draft",
           createdAt: serverTimestamp(),
+          registrationStartDate: formData.registrationStartDate || null,
+          registrationEndDate: formData.registrationEndDate || null,
         });
 
         setDraftId(docRef.id); // ⭐ persist ID
@@ -543,6 +608,20 @@ export default function NewEvent({ editId }: NewEventProps) {
   };
 
   const handleSubmit = async () => {
+    // 🛑 Final Validation before submission
+    for (const t of formData.ticketTypes) {
+      if (!t.saleStartDate || !t.saleEndDate) {
+        toast.error(`Please set start/end dates for ticket: ${t.name}`);
+        setStep(4); // Redirect to ticket step
+        return;
+      }
+      if (new Date(t.saleEndDate) <= new Date(t.saleStartDate)) {
+        toast.error(`End date must be after start date for: ${t.name}`);
+        setStep(4);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     const submitPromise = async () => {
@@ -582,8 +661,12 @@ export default function NewEvent({ editId }: NewEventProps) {
           gatewayFee,
           settlementAmount,
           finalPrice,
+          feePayer: formData.platformFeePayer,
+          feePercentage,
         };
       });
+
+      console.log("Submitting Ticket Types:", processedTicketTypes);
 
       // ✅ Extract only Firestore-safe fields
       const eventData = {
@@ -606,12 +689,15 @@ export default function NewEvent({ editId }: NewEventProps) {
         organizerDescription: formData.organizerDescription,
         redirectUrl: formData.redirectUrl || null,
         status: "published",
+        registrationStartDate: formData.registrationStartDate || null,
+        registrationEndDate: formData.registrationEndDate || null,
       };
 
       let finalDocId = publishedId;
 
       if (publishedId) {
         // 🔁 Update existing published event
+        setSuccessActionType("update");
         docRef = doc(db, "published_events", publishedId);
         await updateDoc(docRef, {
           ...eventData,
@@ -619,6 +705,7 @@ export default function NewEvent({ editId }: NewEventProps) {
         });
       } else {
         // 🆕 Create new published event
+        setSuccessActionType("create");
         docRef = await addDoc(collection(db, "published_events"), {
           ...eventData,
           posterUrl: null,
@@ -678,9 +765,13 @@ export default function NewEvent({ editId }: NewEventProps) {
     router.prefetch("/dashboard/organizer/manage-events");
     try {
       await toast.promise(submitPromise(), {
-        loading: "Publishing event...",
-        success: "Event published successfully 🎉",
-        error: "Failed to publish event ❌",
+        loading: publishedId ? "Updating event..." : "Publishing event...",
+        success: publishedId
+          ? "Event updated successfully 🔄"
+          : "Event published successfully 🎉",
+        error: publishedId
+          ? "Failed to update event ❌"
+          : "Failed to publish event ❌",
       });
       // router.push("/dashboard/organizer/manage-events"); // OLD REDIRECT
       setShowShareModal(true); // NEW: Show Modal
@@ -716,7 +807,7 @@ export default function NewEvent({ editId }: NewEventProps) {
     { id: 4, title: "Ticket Setup", icon: Ticket },
     { id: 5, title: "Registration Form", icon: User },
     { id: 6, title: "Media", icon: Image },
-    { id: 7, title: "Publish", icon: Check },
+    { id: 7, title: publishedId ? "Update" : "Publish", icon: Check },
   ];
 
   const isValidStep = (currentStep: number) => {
@@ -736,12 +827,23 @@ export default function NewEvent({ editId }: NewEventProps) {
           : formData.onlineLink;
       case 4:
         return formData.ticketTypes.every((t) => {
-          if (formData.isPaid) {
-            return t.name && Number(t.quantity) > 0 && Number(t.price) > 0;
+          const basicValidation =
+            t.name &&
+            Number(t.quantity) > 0 &&
+            t.saleStartDate &&
+            t.saleEndDate;
+          if (t.enableBulkTicketing) {
+            const bulkValidation =
+              Number(t.minBookingPerOrder) > 0 &&
+              Number(t.maxBookingPerOrder) > 0;
+            if (!bulkValidation) return false;
           }
-          return t.name && Number(t.quantity) > 0;
+
+          if (formData.isPaid) {
+            return basicValidation && Number(t.price) > 0;
+          }
+          return basicValidation;
         });
-      case 5:
         return true; // Registration fields are customizable, always valid
       case 6:
         return true; // Media optional
@@ -757,10 +859,12 @@ export default function NewEvent({ editId }: NewEventProps) {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Create New Event
+              {publishedId ? "Edit Event" : "Create New Event"}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Fill in the details to publish your event
+              {publishedId
+                ? "Update your event details"
+                : "Fill in the details to publish your event"}
             </p>
           </div>
           <button
@@ -963,36 +1067,29 @@ export default function NewEvent({ editId }: NewEventProps) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Date <span className="text-red-500">*</span>
+                    Date & Time <span className="text-red-500">*</span>
                   </label>
-                  <DatePicker
-                    selected={formData.date ? new Date(formData.date) : null}
-                    onChange={(date: Date | null) =>
-                      updateFormData({
-                        date: date ? date.toISOString().split("T")[0] : "",
-                      })
-                    }
-                    minDate={new Date()}
-                    dateFormat="MMMM d, yyyy"
-                    placeholderText="Select event date"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all cursor-pointer"
-                    wrapperClassName="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Time <span className="text-red-500">*</span>
-                  </label>
+
                   <DatePicker
                     selected={
-                      formData.time
-                        ? new Date(`2000-01-01T${formData.time}`)
+                      formData.date
+                        ? formData.time
+                          ? new Date(`${formData.date}T${formData.time}`)
+                          : new Date(formData.date)
                         : null
                     }
                     onChange={(date: Date | null) => {
                       if (date) {
+                        // Use local time components to avoid timezone shifts
+                        const year = date.getFullYear();
+                        const month = (date.getMonth() + 1)
+                          .toString()
+                          .padStart(2, "0");
+                        const day = date.getDate().toString().padStart(2, "0");
+                        const dateString = `${year}-${month}-${day}`;
+
                         const hours = date
                           .getHours()
                           .toString()
@@ -1001,17 +1098,19 @@ export default function NewEvent({ editId }: NewEventProps) {
                           .getMinutes()
                           .toString()
                           .padStart(2, "0");
-                        updateFormData({ time: `${hours}:${minutes}` });
+                        const timeString = `${hours}:${minutes}`;
+
+                        updateFormData({
+                          date: dateString,
+                          time: timeString,
+                        });
                       } else {
-                        updateFormData({ time: "" });
+                        updateFormData({ date: "", time: "" });
                       }
                     }}
                     showTimeSelect
-                    showTimeSelectOnly
-                    timeIntervals={15}
-                    timeCaption="Time"
-                    dateFormat="h:mm aa"
-                    placeholderText="Select start time"
+                    dateFormat="MMMM d, yyyy 'at' h:mm:ss aa"
+                    placeholderText="Select event date & time"
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all cursor-pointer"
                     wrapperClassName="w-full"
                   />
@@ -1278,14 +1377,62 @@ export default function NewEvent({ editId }: NewEventProps) {
                   const organizerGets =
                     formData.platformFeePayer === "buyer" ? price : price - fee;
 
+                  const isExpanded = expandedTicketIndex === index;
+
+                  if (!isExpanded) {
+                    return (
+                      <div
+                        key={index}
+                        className="p-5 bg-white border border-gray-200 rounded-xl flex items-center justify-between group hover:border-red-200 transition-all shadow-sm"
+                      >
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-lg">
+                            {ticket.name || "Untitled Ticket"}
+                          </h4>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {ticket.quantity
+                              ? `${ticket.quantity} units available`
+                              : "Quantity not set"}{" "}
+                            •{" "}
+                            <span
+                              className={
+                                price > 0
+                                  ? "text-gray-900 font-medium"
+                                  : "text-green-600 font-medium"
+                              }
+                            >
+                              {price > 0 ? `₹${price}` : "Free"}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setExpandedTicketIndex(index)}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Edit Ticket"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => removeTicketType(index)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Remove Ticket"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={index}
-                      className="p-6 bg-gray-50 border border-gray-200 rounded-2xl space-y-6 relative group hover:border-red-200 transition-all"
+                      className="p-6 bg-gray-50 border border-gray-200 rounded-2xl space-y-6 relative group border-l-4 border-l-red-500 transition-all shadow-sm"
                     >
                       <button
                         onClick={() => removeTicketType(index)}
-                        className="absolute top-4 right-4 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-600 opacity-100 transition-opacity"
                         title="Remove Ticket"
                       >
                         <Trash2 className="h-5 w-5" />
@@ -1333,7 +1480,7 @@ export default function NewEvent({ editId }: NewEventProps) {
                           />
                         </div>
 
-                        <div>
+                        <div className="md:col-span-1">
                           <label className="block text-sm font-semibold text-gray-700 mb-2">
                             Quantity <span className="text-red-500">*</span>
                           </label>
@@ -1354,6 +1501,224 @@ export default function NewEvent({ editId }: NewEventProps) {
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
+
+                        {/* Advanced Settings for Ticket */}
+                        <div className="md:col-span-3 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Ticket Sales Start{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <DatePicker
+                              selected={
+                                ticket.saleStartDate
+                                  ? new Date(ticket.saleStartDate)
+                                  : null
+                              }
+                              onChange={(date: Date | null) =>
+                                updateTicketType(index, {
+                                  saleStartDate: date
+                                    ? date.toISOString()
+                                    : null,
+                                })
+                              }
+                              dateFormat="MMMM d, yyyy 'at' h:mm:ss aa"
+                              showTimeSelect
+                              placeholderText="Select start date & time"
+                              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all cursor-pointer text-sm"
+                              wrapperClassName="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Ticket Sales End{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
+                            <DatePicker
+                              selected={
+                                ticket.saleEndDate
+                                  ? new Date(ticket.saleEndDate)
+                                  : null
+                              }
+                              onChange={(date: Date | null) =>
+                                updateTicketType(index, {
+                                  saleEndDate: date ? date.toISOString() : null,
+                                })
+                              }
+                              dateFormat="MMMM d, yyyy 'at' h:mm:ss aa"
+                              showTimeSelect
+                              minDate={
+                                ticket.saleStartDate
+                                  ? new Date(ticket.saleStartDate)
+                                  : new Date()
+                              }
+                              placeholderText="Select end date & time"
+                              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all cursor-pointer text-sm"
+                              wrapperClassName="w-full"
+                            />
+                          </div>
+
+                          {/* Enable Bulk Ticketing Toggle */}
+                          <div className="md:col-span-2 pt-2">
+                            <label className="flex items-center space-x-3 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={ticket.enableBulkTicketing || false}
+                                onChange={(e) =>
+                                  updateTicketType(index, {
+                                    enableBulkTicketing: e.target.checked,
+                                    // reset values if unchecked
+                                    minBookingPerOrder: !e.target.checked
+                                      ? ""
+                                      : ticket.minBookingPerOrder,
+                                    maxBookingPerOrder: !e.target.checked
+                                      ? ""
+                                      : ticket.maxBookingPerOrder,
+                                  })
+                                }
+                                className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                              />
+                              <div className="text-sm">
+                                <span className="font-semibold text-gray-700 block">
+                                  Enable Bulk Ticketing
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  Set minimum and maximum ticket limits per
+                                  order.
+                                </span>
+                              </div>
+                            </label>
+                          </div>
+
+                          {ticket.enableBulkTicketing && (
+                            <div className="md:col-span-2 grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                              <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                  Min Per Order{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={ticket.minBookingPerOrder || ""}
+                                  onChange={(e) =>
+                                    updateTicketType(index, {
+                                      minBookingPerOrder:
+                                        e.target.value === ""
+                                          ? ""
+                                          : Number(e.target.value),
+                                    })
+                                  }
+                                  placeholder="1"
+                                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                  Max Per Order{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={ticket.maxBookingPerOrder || ""}
+                                  onChange={(e) =>
+                                    updateTicketType(index, {
+                                      maxBookingPerOrder:
+                                        e.target.value === ""
+                                          ? ""
+                                          : Number(e.target.value),
+                                    })
+                                  }
+                                  placeholder="10"
+                                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center md:items-start pt-4 md:col-span-2">
+                            <label className="flex items-center space-x-3 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={ticket.requireAttendeeDetails || false}
+                                onChange={(e) =>
+                                  updateTicketType(index, {
+                                    requireAttendeeDetails: e.target.checked,
+                                  })
+                                }
+                                className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                              />
+                              <div className="text-sm">
+                                <span className="font-semibold text-gray-700 block">
+                                  Collect Details for Each Attendee
+                                </span>
+                                <span className="text-xs text-gray-500"></span>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Save Ticket Button */}
+                      <div className="flex justify-end pt-6 border-t border-gray-100">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+
+                            // Validation
+                            if (
+                              !ticket.name ||
+                              !ticket.quantity ||
+                              !ticket.saleStartDate ||
+                              !ticket.saleEndDate
+                            ) {
+                              toast.error(
+                                "Please fill in all required fields (Name, Quantity, Dates)"
+                              );
+                              return;
+                            }
+
+                            if (formData.isPaid && !ticket.price) {
+                              toast.error("Please enter a ticket price");
+                              return;
+                            }
+
+                            if (ticket.enableBulkTicketing) {
+                              if (
+                                !ticket.minBookingPerOrder ||
+                                !ticket.maxBookingPerOrder
+                              ) {
+                                toast.error(
+                                  "Please set min and max booking limits for bulk ticketing"
+                                );
+                                return;
+                              }
+                            }
+
+                            if (!ticket.saleStartDate || !ticket.saleEndDate) {
+                              toast.error(
+                                "Please set Ticket Sales Start and End dates"
+                              );
+                              return;
+                            }
+
+                            const start = new Date(ticket.saleStartDate);
+                            const end = new Date(ticket.saleEndDate);
+                            if (end <= start) {
+                              toast.error(
+                                "Sales End Date must be after Start Date"
+                              );
+                              return;
+                            }
+
+                            setExpandedTicketIndex(null);
+                          }}
+                          className="flex items-center gap-2 px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all text-sm font-medium"
+                        >
+                          <Save className="w-4 h-4" />
+                          Save Ticket
+                        </button>
                       </div>
 
                       {/* Cost Breakdown */}
@@ -1377,7 +1742,8 @@ export default function NewEvent({ editId }: NewEventProps) {
                               <>
                                 <div className="flex justify-between items-center text-red-600">
                                   <span>
-                                    GraburPass Platform Fee ({feePercentage}%)
+                                    GraburPass Platform Fee ({feePercentage}
+                                    %)
                                   </span>
                                   <span>-₹{fee.toFixed(2)}</span>
                                 </div>
@@ -2008,19 +2374,25 @@ export default function NewEvent({ editId }: NewEventProps) {
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                {step === 6 ? "Next: Publish" : "Next"}
+                {step === 6
+                  ? publishedId
+                    ? "Next: Update"
+                    : "Next: Publish"
+                  : "Next"}
                 <ChevronRight className="h-4 w-4 inline ml-2" />
               </button>
             ) : (
               <div className="flex space-x-4">
-                <button
-                  onClick={() => SaveAsDraft()}
-                  disabled={isSubmitting}
-                  className="flex items-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>Save Draft</span>
-                </button>
+                {!publishedId && (
+                  <button
+                    onClick={() => SaveAsDraft()}
+                    disabled={isSubmitting}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>Save Draft</span>
+                  </button>
+                )}
                 <button
                   onClick={() => handleSubmit()}
                   disabled={isSubmitting || !formData.termsAccepted}
@@ -2032,7 +2404,13 @@ export default function NewEvent({ editId }: NewEventProps) {
                 >
                   <Check className="h-4 w-4" />
                   <span>
-                    {isSubmitting ? "Publishing..." : "Publish Event"}
+                    {isSubmitting
+                      ? publishedId
+                        ? "Updating..."
+                        : "Publishing..."
+                      : publishedId
+                      ? "Update Event"
+                      : "Publish Event"}
                   </span>
                 </button>
               </div>
@@ -2051,7 +2429,9 @@ export default function NewEvent({ editId }: NewEventProps) {
               </div>
 
               <h3 className="text-2xl font-bold text-gray-900">
-                Event Published! 🎉
+                {successActionType === "update"
+                  ? "Event Updated! 🔄"
+                  : "Event Published! 🎉"}
               </h3>
               <p className="text-gray-500">
                 Your event is now live and ready to accept bookings. Share the

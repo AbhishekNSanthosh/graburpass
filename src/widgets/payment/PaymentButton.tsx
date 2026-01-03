@@ -14,6 +14,8 @@ interface PaymentButtonProps {
   bookingData?: any;
   guestMode?: boolean;
   disabled?: boolean;
+  customLabel?: string;
+  onBeforePayment?: () => boolean | Promise<boolean>; // Support both sync and async
 }
 
 const PaymentButton = ({
@@ -23,6 +25,8 @@ const PaymentButton = ({
   bookingData,
   guestMode = false,
   disabled = false,
+  customLabel,
+  onBeforePayment,
 }: PaymentButtonProps) => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -36,10 +40,21 @@ const PaymentButton = ({
   }, []);
 
   const handlePayment = async () => {
+    // Run pre-payment validation if provided
+    if (onBeforePayment) {
+      setLoading(true); // Show loading during validation
+      const result = await onBeforePayment();
+      if (!result) {
+        setLoading(false);
+        return;
+      }
+    }
+
     // Auth Check (skipped if guestMode)
     if (!guestMode && !user) {
       toast.error("Please login to book a ticket");
       router.push("/login"); // or open login modal
+      setLoading(false);
       return;
     }
 
@@ -161,10 +176,14 @@ const PaymentButton = ({
         className="group relative flex items-center justify-center gap-2 w-full bg-red-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-red-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
       >
         {loading ? (
-          <span className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />
+          <>
+            <span className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />
+            Validating...
+          </>
         ) : (
           <>
-            {guestMode ? "Pay & Book" : user ? "Book Now" : "Login to Book"}
+            {customLabel ||
+              (guestMode ? "Pay & Book" : user ? "Book Now" : "Login to Book")}
             <span className="group-hover:translate-x-1 transition-transform">
               →
             </span>
