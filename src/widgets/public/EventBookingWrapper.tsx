@@ -18,6 +18,22 @@ import Link from "next/link";
 import PaymentButton from "../payment/PaymentButton";
 import { calculatePaymentBreakdown } from "@/utils/paymentUtils";
 
+// HELPER: Format Time to AM/PM
+const formatTime = (timeStr?: string) => {
+  if (!timeStr) return "";
+  // If already contains AM/PM, return as is (normalized uppercase)
+  if (timeStr.match(/(am|pm)/i)) return timeStr.toUpperCase();
+
+  const [hours, minutes] = timeStr.split(":");
+  if (hours === undefined || isNaN(Number(hours))) return timeStr;
+
+  const h = Number(hours);
+  const m = minutes || "00";
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${m} ${ampm}`;
+};
+
 // TYPES
 interface RegistrationField {
   id: string;
@@ -229,7 +245,7 @@ export default function EventBookingWrapper() {
   });
 
   return (
-    <div className="min-h-screen bg-background relative selection:bg-primary/10">
+    <div className="h-auto bg-background relative selection:bg-primary/10">
       {/* Navbar / Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-black/5">
         <div className="max-w-2xl mx-auto px-6 sm:px-0 h-16 flex items-center justify-between">
@@ -250,36 +266,74 @@ export default function EventBookingWrapper() {
       <main className="pt-24 pb-32 px-6">
         <div className="max-w-2xl mx-auto space-y-8">
           {/* Minimal Event Summary */}
-          <div className="flex gap-6 items-start animate-fade-in-up">
-            <div className="w-24 h-32 relative rounded-xl overflow-hidden border border-black/10 shrink-0 bg-surface-2 shadow-sm">
+          {/* Event Summary Card */}
+          <div className="flex flex-col sm:flex-row gap-6 animate-fade-in-up bg-white border border-gray-100 p-4 rounded-[8px]">
+            {/* Poster / Thumbnail */}
+            <div className="w-full sm:w-32 h-48 sm:h-40 relative rounded-[7px] overflow-hidden border border-black/5 shrink-0 bg-surface-2 shadow-sm group">
               <Image
                 src={event.posterUrl || "/default-event-thumb.jpg"}
                 alt={event.name}
                 fill
-                className="object-cover"
+                className="object-cover transition-transform duration-500 group-hover:scale-110"
               />
             </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-black text-foreground leading-tight">
+
+            {/* Event Details */}
+            <div className="flex-1 space-y-3 py-1">
+              {/* Title */}
+              <h1 className="text-2xl font-black text-gray-900 leading-tight">
                 {event.name}
               </h1>
-              <div className="space-y-1 text-sm text-muted pt-1">
-                <p className="flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5" />
-                  {dateObj.toLocaleDateString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5" />
-                  {event.startTime} - {event.endTime}
-                </p>
-                <p className="flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {event.venue}
-                </p>
+
+              {/* Metadata Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-3 p-2 rounded-xl bg-gray-50 border border-gray-100/50">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-primary shrink-0">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted/80">
+                      Date
+                    </span>
+                    <span className="text-sm font-bold text-gray-700">
+                      {dateObj.toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-2 rounded-xl bg-gray-50 border border-gray-100/50">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-primary shrink-0">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted/80">
+                      Time
+                    </span>
+                    <span className="text-sm font-bold text-gray-700">
+                      {formatTime(event.startTime)}{" "}
+                      {event?.endTime && <>- {formatTime(event.endTime)}</>}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-2 rounded-xl bg-gray-50 border border-gray-100/50 sm:col-span-2">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-primary shrink-0">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted/80">
+                      Venue
+                    </span>
+                    <span className="text-sm font-bold text-gray-700 line-clamp-1">
+                      {event.venue}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -300,8 +354,8 @@ export default function EventBookingWrapper() {
                     onClick={() => handleTicketChange(idx)}
                     className={`cursor-pointer rounded-xl border-2 p-4 flex justify-between items-center transition-all ${
                       selectedTicketIndex === idx
-                        ? "border-black bg-surface-1 shadow-md"
-                        : "border-transparent bg-surface-1 hover:border-black/5"
+                        ? "border-primary bg-primary/5 shadow-md"
+                        : "border-transparent bg-surface-1 hover:border-primary/30"
                     }`}
                   >
                     <div>
@@ -314,11 +368,11 @@ export default function EventBookingWrapper() {
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                         selectedTicketIndex === idx
                           ? "border-primary"
-                          : "border-black/20"
+                          : "border-black/20 group-hover:border-primary/50"
                       }`}
                     >
                       {selectedTicketIndex === idx && (
-                        <div className="w-2.5 h-2.5 bg-primary rounded-full" />
+                        <div className="w-2.5 h-2.5 bg-primary rounded-full shadow-sm" />
                       )}
                     </div>
                   </div>
@@ -330,7 +384,7 @@ export default function EventBookingWrapper() {
                 <div className="flex items-center gap-3 bg-surface-1 rounded-lg p-1 border border-black/5">
                   <button
                     onClick={() => handleQuantityChange(ticketQuantity - 1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white shadow-sm transition-all disabled:opacity-30"
+                    className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white hover:text-primary shadow-sm transition-all disabled:opacity-30 disabled:hover:text-muted"
                     disabled={ticketQuantity <= 1}
                   >
                     -
@@ -340,7 +394,7 @@ export default function EventBookingWrapper() {
                   </span>
                   <button
                     onClick={() => handleQuantityChange(ticketQuantity + 1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white shadow-sm transition-all"
+                    className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white hover:text-primary shadow-sm transition-all"
                   >
                     +
                   </button>
@@ -397,7 +451,7 @@ export default function EventBookingWrapper() {
                         onChange={(e) =>
                           handleInputChange(field.id, e.target.value)
                         }
-                        className="w-full bg-surface-1 border border-transparent focus:border-black/20 focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium appearance-none"
+                        className="w-full bg-surface-1 border border-transparent focus:border-primary focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium appearance-none"
                       >
                         <option value="">Select...</option>
                         {field.options?.map((opt) => (
@@ -414,7 +468,7 @@ export default function EventBookingWrapper() {
                         handleInputChange(field.id, e.target.value)
                       }
                       rows={3}
-                      className="w-full bg-surface-1 border border-transparent focus:border-black/20 focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium min-h-[100px] resize-none"
+                      className="w-full bg-surface-1 border border-transparent focus:border-primary focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium min-h-[100px] resize-none"
                     />
                   ) : (
                     <input
@@ -423,7 +477,7 @@ export default function EventBookingWrapper() {
                       onChange={(e) =>
                         handleInputChange(field.id, e.target.value)
                       }
-                      className="w-full bg-surface-1 border border-transparent focus:border-black/20 focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium"
+                      className="w-full bg-surface-1 border border-transparent focus:border-primary focus:bg-white rounded-xl px-4 py-3 outline-none transition-all text-sm font-medium"
                     />
                   )}
                 </div>

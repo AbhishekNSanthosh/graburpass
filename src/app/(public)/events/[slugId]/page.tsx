@@ -416,7 +416,7 @@ export default function PublicEventPage() {
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >
-                      Process to Book{" "}
+                      Proceed to Book{" "}
                       <ArrowLeft className="w-5 h-5 ml-2 rotate-180" />
                     </button>
                   </div>
